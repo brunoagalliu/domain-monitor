@@ -1,4 +1,4 @@
-const DomainMonitor = require('../monitor');
+const DomainMonitor = require('./monitor');
 
 module.exports = async (req, res) => {
   // Enable CORS
