@@ -1,4 +1,3 @@
-// index.js
 const express = require('express');
 const cors = require('cors');
 const cron = require('node-cron');
@@ -34,7 +33,9 @@ app.get('/api', (req, res) => {
       'DELETE /domains/:id': 'Remove a domain',
       'POST /scan': 'Trigger manual scan',
       'GET /scans/recent': 'Get recent scan results',
-      'GET /stats': 'Get dashboard statistics'
+      'GET /stats': 'Get dashboard statistics',
+      'GET /categories': 'Get all categories',
+      'POST /categories': 'Add a new category'
     }
   });
 });
@@ -43,7 +44,11 @@ app.get('/api', (req, res) => {
 app.get('/domains', async (req, res) => {
   try {
     const [domains] = await db.execute(
-      'SELECT * FROM domains WHERE is_active = true ORDER BY domain'
+      `SELECT d.*, c.name as category_name, c.color as category_color 
+       FROM domains d 
+       LEFT JOIN categories c ON d.category_id = c.id 
+       WHERE d.is_active = true 
+       ORDER BY c.name, d.domain`
     );
     res.json(domains);
   } catch (error) {
@@ -52,16 +57,52 @@ app.get('/domains', async (req, res) => {
   }
 });
 
+// Get categories
+app.get('/categories', async (req, res) => {
+  try {
+    const categories = await monitor.getCategories();
+    res.json(categories);
+  } catch (error) {
+    console.error('Error in GET /categories:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Add category
+app.post('/categories', async (req, res) => {
+  try {
+    const { name, color } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ error: 'Category name is required' });
+    }
+    
+    const categoryId = await monitor.addCategory(name, color);
+    res.json({ 
+      message: 'Category added successfully', 
+      id: categoryId,
+      name: name 
+    });
+  } catch (error) {
+    console.error('Error in POST /categories:', error);
+    if (error.code === 'ER_DUP_ENTRY') {
+      res.status(400).json({ error: 'Category already exists' });
+    } else {
+      res.status(500).json({ error: error.message });
+    }
+  }
+});
+
 // Add domain
 app.post('/domains', async (req, res) => {
   try {
-    const { domain, notes } = req.body;
+    const { domain, notes, category_id } = req.body;
     
     if (!domain) {
       return res.status(400).json({ error: 'Domain is required' });
     }
     
-    const domainId = await monitor.addDomain(domain, notes || '');
+    const domainId = await monitor.addDomain(domain, notes || '', category_id || null);
     res.json({ 
       message: 'Domain added successfully', 
       id: domainId,
@@ -161,8 +202,8 @@ app.listen(PORT, async () => {
   
   console.log('─'.repeat(50));
   
-  // Schedule automatic scans every 6 hours
-  cron.schedule('*/30 * * * *', async () => {
+  // Schedule automatic scans every hour
+  cron.schedule('0 * * * *', async () => {
     console.log('⏰ Running scheduled scan...');
     try {
       await monitor.scanDomains();
@@ -171,7 +212,7 @@ app.listen(PORT, async () => {
     }
   });
   
-  console.log('📅 Automatic scans scheduled every 6 hours');
+  console.log('📅 Automatic scans scheduled every hour');
   console.log('💡 Use the dashboard to add domains and trigger manual scans');
   console.log('\n🎯 Ready to monitor your domains!\n');
   

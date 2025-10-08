@@ -9,20 +9,35 @@ async function setupDatabase() {
   });
 
   try {
-    // Create database
-    await connection.execute(`CREATE DATABASE IF NOT EXISTS ${process.env.MYSQL_DATABASE}`);
-    await connection.execute(`USE ${process.env.MYSQL_DATABASE}`);
+    // Create database (with backticks to handle special characters)
+    const dbName = process.env.MYSQL_DATABASE;
+    await connection.execute(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``);
+    await connection.execute(`USE \`${dbName}\``);
 
-    // Create domains table
+    // Create categories table
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) UNIQUE NOT NULL,
+        color VARCHAR(7) DEFAULT '#667eea',
+        created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_name (name)
+      )
+    `);
+
+    // Create domains table with category support
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS domains (
         id INT AUTO_INCREMENT PRIMARY KEY,
         domain VARCHAR(255) UNIQUE NOT NULL,
+        category_id INT DEFAULT NULL,
         added_date DATETIME DEFAULT CURRENT_TIMESTAMP,
         is_active BOOLEAN DEFAULT true,
         notes TEXT,
+        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
         INDEX idx_domain (domain),
-        INDEX idx_active (is_active)
+        INDEX idx_active (is_active),
+        INDEX idx_category (category_id)
       )
     `);
 
@@ -44,10 +59,23 @@ async function setupDatabase() {
       )
     `);
 
+    // Insert default categories
+    await connection.execute(`
+      INSERT IGNORE INTO categories (name, color) VALUES 
+        ('Production', '#48bb78'),
+        ('Staging', '#ed8936'),
+        ('Development', '#4299e1'),
+        ('Client Sites', '#9f7aea'),
+        ('Personal', '#667eea'),
+        ('Other', '#a0aec0')
+    `);
+
     console.log('✅ Database setup completed successfully!');
     console.log('📋 Tables created:');
+    console.log('   - categories (organize domains into groups)');
     console.log('   - domains (stores your monitored domains)');
     console.log('   - scan_results (stores scan history and threat data)');
+    console.log('✨ Default categories added: Production, Staging, Development, Client Sites, Personal, Other');
     
   } catch (error) {
     console.error('❌ Database setup failed:', error);

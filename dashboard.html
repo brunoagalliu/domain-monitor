@@ -97,10 +97,12 @@
             display: flex;
             gap: 10px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
         }
 
-        .input-group input {
+        .input-group input, .input-group select {
             flex: 1;
+            min-width: 150px;
             padding: 12px 16px;
             border: 2px solid #e2e8f0;
             border-radius: 8px;
@@ -108,9 +110,13 @@
             transition: border-color 0.3s ease;
         }
 
-        .input-group input:focus {
+        .input-group input:focus, .input-group select:focus {
             outline: none;
             border-color: #667eea;
+        }
+
+        .category-select {
+            flex: 0.5;
         }
 
         .btn {
@@ -164,6 +170,37 @@
         .domains-grid {
             display: grid;
             gap: 15px;
+        }
+
+        .category-section {
+            margin-bottom: 30px;
+        }
+
+        .category-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .category-badge {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            color: white;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .category-count {
+            background: rgba(255, 255, 255, 0.3);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
         }
 
         .domain-item {
@@ -421,6 +458,9 @@
                         placeholder="Enter domain (e.g., example.com)"
                         onkeypress="if(event.key === 'Enter') addDomain()"
                     >
+                    <select id="categorySelect" class="category-select">
+                        <option value="">Select Category</option>
+                    </select>
                     <input 
                         type="text" 
                         id="notesInput" 
@@ -440,7 +480,7 @@
                 <h2 class="section-title">Monitored Domains</h2>
                 <div class="auto-scan-indicator active">
                     <div class="pulse-dot"></div>
-                    <span>Auto-scan: Every 30 minutes</span>
+                    <span>Auto-scan: Every hour</span>
                 </div>
             </div>
 
@@ -458,14 +498,36 @@
         const API_BASE = 'https://domain.trackthisclicks.com';
         
         let domains = [];
+        let categories = [];
         let isScanning = false;
 
         // Initialize dashboard
         document.addEventListener('DOMContentLoaded', () => {
+            loadCategories();
             loadDomains();
             // Refresh every 30 seconds
             setInterval(loadDomains, 30000);
         });
+
+        async function loadCategories() {
+            try {
+                const response = await fetch(`${API_BASE}/categories`);
+                categories = await response.json();
+                
+                // Populate category dropdown
+                const select = document.getElementById('categorySelect');
+                select.innerHTML = '<option value="">No Category</option>';
+                categories.forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat.id;
+                    option.textContent = cat.name;
+                    option.style.color = cat.color;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading categories:', error);
+            }
+        }
 
         async function loadDomains() {
             try {
@@ -524,53 +586,116 @@
                 return;
             }
 
-            const domainsHTML = activeDomains.map(domain => {
-                const statusClass = `status-${domain.status}`;
-                const badgeClass = `badge-${domain.status}`;
-                const statusText = domain.status.charAt(0).toUpperCase() + domain.status.slice(1);
-                const lastScanText = domain.lastScan 
-                    ? `Last scan: ${new Date(domain.lastScan).toLocaleString()}`
-                    : 'Never scanned';
-
-                let threatInfo = '';
-                if (domain.threats && domain.threats !== 'null' && domain.threats !== '[]') {
-                    const threats = JSON.parse(domain.threats);
-                    if (threats && threats.length > 0) {
-                        threatInfo = `
-                            <div class="threat-info">
-                                ⚠️ Threats detected: ${threats.join(', ')}
-                            </div>
-                        `;
+            // Group domains by category
+            const grouped = {};
+            const uncategorized = [];
+            
+            activeDomains.forEach(domain => {
+                if (domain.category_id && domain.category_name) {
+                    if (!grouped[domain.category_name]) {
+                        grouped[domain.category_name] = {
+                            name: domain.category_name,
+                            color: domain.category_color || '#667eea',
+                            domains: []
+                        };
                     }
+                    grouped[domain.category_name].domains.push(domain);
+                } else {
+                    uncategorized.push(domain);
                 }
+            });
 
-                return `
-                    <div class="domain-item">
-                        <div class="domain-info">
-                            <div class="status-indicator ${statusClass}"></div>
-                            <div>
-                                <div class="domain-name">${domain.domain}</div>
-                                <div class="last-scan">${lastScanText}</div>
-                                ${domain.notes ? `<div class="last-scan">📝 ${domain.notes}</div>` : ''}
-                                ${threatInfo}
+            let html = '';
+
+            // Render categorized domains
+            Object.keys(grouped).sort().forEach(categoryName => {
+                const category = grouped[categoryName];
+                const safeDomains = category.domains.filter(d => d.status === 'safe').length;
+                const flaggedDomains = category.domains.filter(d => d.status === 'flagged').length;
+                
+                html += `
+                    <div class="category-section">
+                        <div class="category-header">
+                            <div class="category-badge" style="background: ${category.color}">
+                                ${category.name}
+                                <span class="category-count">${category.domains.length}</span>
                             </div>
+                            ${flaggedDomains > 0 ? `<span style="color: #f56565; font-size: 14px;">⚠️ ${flaggedDomains} flagged</span>` : ''}
+                            ${safeDomains > 0 ? `<span style="color: #48bb78; font-size: 14px;">✓ ${safeDomains} safe</span>` : ''}
                         </div>
-                        <div class="domain-meta">
-                            <span class="status-badge ${badgeClass}">${statusText}</span>
-                            <button class="btn-remove" onclick="removeDomain(${domain.id})">Remove</button>
+                        <div class="domains-grid">
+                            ${category.domains.map(domain => renderDomainItem(domain)).join('')}
                         </div>
                     </div>
                 `;
-            }).join('');
+            });
 
-            container.innerHTML = `<div class="domains-grid">${domainsHTML}</div>`;
+            // Render uncategorized domains
+            if (uncategorized.length > 0) {
+                html += `
+                    <div class="category-section">
+                        <div class="category-header">
+                            <div class="category-badge" style="background: #a0aec0">
+                                Uncategorized
+                                <span class="category-count">${uncategorized.length}</span>
+                            </div>
+                        </div>
+                        <div class="domains-grid">
+                            ${uncategorized.map(domain => renderDomainItem(domain)).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+        }
+
+        function renderDomainItem(domain) {
+            const statusClass = `status-${domain.status}`;
+            const badgeClass = `badge-${domain.status}`;
+            const statusText = domain.status.charAt(0).toUpperCase() + domain.status.slice(1);
+            const lastScanText = domain.lastScan 
+                ? `Last scan: ${new Date(domain.lastScan).toLocaleString()}`
+                : 'Never scanned';
+
+            let threatInfo = '';
+            if (domain.threats && domain.threats !== 'null' && domain.threats !== '[]') {
+                const threats = JSON.parse(domain.threats);
+                if (threats && threats.length > 0) {
+                    threatInfo = `
+                        <div class="threat-info">
+                            ⚠️ Threats detected: ${threats.join(', ')}
+                        </div>
+                    `;
+                }
+            }
+
+            return `
+                <div class="domain-item">
+                    <div class="domain-info">
+                        <div class="status-indicator ${statusClass}"></div>
+                        <div>
+                            <div class="domain-name">${domain.domain}</div>
+                            <div class="last-scan">${lastScanText}</div>
+                            ${domain.notes ? `<div class="last-scan">📝 ${domain.notes}</div>` : ''}
+                            ${threatInfo}
+                        </div>
+                    </div>
+                    <div class="domain-meta">
+                        <span class="status-badge ${badgeClass}">${statusText}</span>
+                        <button class="btn-remove" onclick="removeDomain(${domain.id})">Remove</button>
+                    </div>
+                </div>
+            `;
         }
 
         async function addDomain() {
             const domainInput = document.getElementById('domainInput');
             const notesInput = document.getElementById('notesInput');
+            const categorySelect = document.getElementById('categorySelect');
             const domain = domainInput.value.trim();
             const notes = notesInput.value.trim();
+            const categoryId = categorySelect.value;
 
             if (!domain) {
                 showAlert('Please enter a domain', 'warning');
@@ -590,11 +715,16 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ domain, notes })
+                    body: JSON.stringify({ 
+                        domain, 
+                        notes,
+                        category_id: categoryId || null 
+                    })
                 });
 
                 if (response.ok) {
-                    showAlert(`Domain ${domain} added successfully!`, 'success');
+                    const categoryName = categoryId ? categorySelect.options[categorySelect.selectedIndex].text : 'uncategorized';
+                    showAlert(`Domain ${domain} added to ${categoryName}!`, 'success');
                     domainInput.value = '';
                     notesInput.value = '';
                     loadDomains();

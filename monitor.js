@@ -1,4 +1,3 @@
-// monitor.js
 const db = require('./db');
 const SafeBrowsingChecker = require('./safe-browsing');
 require('dotenv').config();
@@ -8,14 +7,14 @@ class DomainMonitor {
     this.checker = new SafeBrowsingChecker();
   }
 
-  async addDomain(domain, notes = '') {
+  async addDomain(domain, notes = '', categoryId = null) {
     try {
       // Clean the domain (remove protocol if present)
       domain = domain.replace(/^https?:\/\//, '').toLowerCase();
       
       const [result] = await db.execute(
-        'INSERT INTO domains (domain, notes) VALUES (?, ?) ON DUPLICATE KEY UPDATE notes = ?, is_active = true',
-        [domain, notes, notes]
+        'INSERT INTO domains (domain, notes, category_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE notes = ?, is_active = true, category_id = ?',
+        [domain, notes, categoryId, notes, categoryId]
       );
       
       console.log(`✅ Domain added: ${domain}`);
@@ -26,10 +25,39 @@ class DomainMonitor {
     }
   }
 
+  async getCategories() {
+    try {
+      const [rows] = await db.execute(
+        'SELECT * FROM categories ORDER BY name'
+      );
+      return rows;
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      throw error;
+    }
+  }
+
+  async addCategory(name, color = '#667eea') {
+    try {
+      const [result] = await db.execute(
+        'INSERT INTO categories (name, color) VALUES (?, ?)',
+        [name, color]
+      );
+      return result.insertId;
+    } catch (error) {
+      console.error('Error adding category:', error);
+      throw error;
+    }
+  }
+
   async getActiveDomains() {
     try {
       const [rows] = await db.execute(
-        'SELECT * FROM domains WHERE is_active = true ORDER BY domain'
+        `SELECT d.*, c.name as category_name, c.color as category_color 
+         FROM domains d 
+         LEFT JOIN categories c ON d.category_id = c.id 
+         WHERE d.is_active = true 
+         ORDER BY c.name, d.domain`
       );
       return rows;
     } catch (error) {
