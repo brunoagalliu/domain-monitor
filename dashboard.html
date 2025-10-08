@@ -495,9 +495,10 @@
 
     <script>
         // API Configuration - Update this to match your server
-        const API_BASE = 'https://domain.trackthisclicks.com';
+        //const API_BASE = 'https://domain.trackthisclicks.com';
         //const API_BASE = 'http://localhost:3306';
-        
+        const API_BASE = '/api';
+
         let domains = [];
         let categories = [];
         let isScanning = false;
@@ -530,31 +531,79 @@
             }
         }
 
+        // In dashboard.html, replace the loadDomains function with this:
+
         async function loadDomains() {
             try {
+                console.log('Fetching domains from:', `${API_BASE}/domains`);
                 const response = await fetch(`${API_BASE}/domains`);
+                
+                // Check if response is ok
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Response not OK:', response.status, errorText);
+                    throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+                }
+                
+                // Check content type
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    console.error('Not JSON response:', text.substring(0, 200));
+                    throw new Error('Server returned non-JSON response. Check server logs.');
+                }
+                
                 const data = await response.json();
+                console.log('Domains loaded:', data.length);
                 
                 // Get recent scans for status
-                const scansResponse = await fetch(`${API_BASE}/scans/recent?limit=100`);
-                const scans = await scansResponse.json();
+                console.log('Fetching scans from:', `${API_BASE}/scans?limit=100`);
+                const scansResponse = await fetch(`${API_BASE}/scans?limit=100`);
                 
-                // Map scan results to domains
-                domains = data.map(domain => {
-                    const latestScan = scans.find(s => s.domain === domain.domain);
-                    return {
+                if (!scansResponse.ok) {
+                    console.warn('Scans fetch failed, continuing with domains only');
+                    domains = data.map(domain => ({
                         ...domain,
-                        status: latestScan ? (latestScan.is_safe ? 'safe' : 'flagged') : 'unknown',
-                        lastScan: latestScan ? latestScan.scan_date : null,
-                        threats: latestScan ? latestScan.threat_types : null
-                    };
-                });
+                        status: 'unknown',
+                        lastScan: null,
+                        threats: null
+                    }));
+                } else {
+                    const scans = await scansResponse.json();
+                    console.log('Scans loaded:', scans.length);
+                    
+                    // Map scan results to domains
+                    domains = data.map(domain => {
+                        const latestScan = scans.find(s => s.domain === domain.domain);
+                        return {
+                            ...domain,
+                            status: latestScan ? (latestScan.is_safe ? 'safe' : 'flagged') : 'unknown',
+                            lastScan: latestScan ? latestScan.scan_date : null,
+                            threats: latestScan ? latestScan.threat_types : null
+                        };
+                    });
+                }
 
                 updateStats();
                 renderDomains();
             } catch (error) {
                 console.error('Error loading domains:', error);
-                showAlert('Error loading domains. Please check your connection.', 'error');
+                showAlert(`Error: ${error.message}. Check browser console for details.`, 'error');
+                
+                // Show error in the domains container
+                const container = document.getElementById('domainsContainer');
+                container.innerHTML = `
+                    <div style="padding: 40px; text-align: center; color: #e53e3e;">
+                        <h3>⚠️ Error Loading Domains</h3>
+                        <p style="margin-top: 10px; color: #718096;">${error.message}</p>
+                        <p style="margin-top: 10px; font-size: 14px; color: #a0aec0;">
+                            Check the browser console (F12) for more details.
+                        </p>
+                        <button class="btn btn-primary" onclick="loadDomains()" style="margin-top: 20px;">
+                            Retry
+                        </button>
+                    </div>
+                `;
             }
         }
 
