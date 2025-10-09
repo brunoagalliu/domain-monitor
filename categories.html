@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Category Management - Domain Safety Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-left h1 {
+            color: #2d3748;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .header-left p {
+            color: #718096;
+            font-size: 16px;
+        }
+
+        .back-link {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .back-link:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+
+        .stat-value {
+            font-size: 36px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #667eea;
+        }
+
+        .stat-label {
+            color: #718096;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .main-card {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+
+        .section-title {
+            font-size: 24px;
+            color: #2d3748;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .section-subtitle {
+            color: #718096;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        .add-form {
+            background: #f7fafc;
+            border: 2px dashed #cbd5e0;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 40px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 8px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .color-picker-group {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .color-picker {
+            width: 80px;
+            height: 50px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .color-presets {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .color-preset {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .color-preset:hover {
+            transform: scale(1.1);
+            border-color: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .color-preset.selected {
+            border-color: white;
+            box-shadow: 0 0 0 2px #667eea;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .alert {
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert-success {
+            background: #c6f6d5;
+            color: #22543d;
+            border: 1px solid #9ae6b4;
+        }
+
+        .alert-error {
+            background: #fed7d7;
+            color: #742a2a;
+            border: 1px solid #feb2b2;
+        }
+
+        .alert-warning {
+            background: #feebc8;
+            color: #7c2d12;
+            border: 1px solid #fbd38d;
+        }
+
+        .categories-list {
+            display: grid;
+            gap: 15px;
+        }
+
+        .category-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px;
+            background: #f7fafc;
+            border-radius: 12px;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .category-item:hover {
+            background: white;
+            border-color: #e2e8f0;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+
+        .category-item.editing {
+            border-color: #667eea;
+            background: white;
+        }
+
+        .category-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex: 1;
+        }
+
+        .category-color {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .category-details {
+            flex: 1;
+        }
+
+        .category-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .category-stats {
+            font-size: 14px;
+            color: #718096;
+        }
+
+        .stat-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            background: #edf2f7;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-right: 8px;
+        }
+
+        .stat-safe {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .stat-flagged {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .category-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-icon {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-edit {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-edit:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-delete {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .btn-delete:hover {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-save {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-save:hover {
+            background: #38a169;
+        }
+
+        .btn-cancel {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .edit-form {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex: 1;
+        }
+
+        .edit-form input[type="text"] {
+            flex: 1;
+            padding: 10px 14px;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .edit-form input[type="color"] {
+            width: 50px;
+            height: 50px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #a0aec0;
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+
+        .empty-state h3 {
+            color: #718096;
+            margin-bottom: 10px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        .spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .modal-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 16px;
+        }
+
+        .modal-text {
+            color: #718096;
+            margin-bottom: 24px;
+            line-height: 1.6;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <h1>📁 Category Management</h1>
+                <p>Organize your domains into categories</p>
+            </div>
+            <a href="/dashboard.html" class="back-link">← Back to Dashboard</a>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="totalCategories">0</div>
+                <div class="stat-label">Total Categories</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalDomains">0</div>
+                <div class="stat-label">Categorized Domains</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="uncategorizedDomains">0</div>
+                <div class="stat-label">Uncategorized</div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-card">
+            <div class="alert" id="alertBox"></div>
+
+            <!-- Add Category Form -->
+            <div class="add-form">
+                <h2 class="section-title">➕ Create New Category</h2>
+                <p class="section-subtitle">Add a new category to organize your domains</p>
+
+                <div class="form-group">
+                    <label class="form-label" for="categoryName">Category Name *</label>
+                    <input 
+                        type="text" 
+                        id="categoryName" 
+                        class="form-input"
+                        placeholder="e.g., Production, Staging, Client Sites"
+                        maxlength="50"
+                        onkeypress="if(event.key === 'Enter') addCategory()"
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Category Color *</label>
+                    <div class="color-picker-group">
+                        <input 
+                            type="color" 
+                            id="categoryColor" 
+                            class="color-picker"
+                            value="#667eea"
+                        >
+                        <div class="color-presets">
+                            <div class="color-preset" style="background: #f56565" onclick="selectColor('#f56565')" title="Red"></div>
+                            <div class="color-preset" style="background: #ed8936" onclick="selectColor('#ed8936')" title="Orange"></div>
+                            <div class="color-preset" style="background: #ecc94b" onclick="selectColor('#ecc94b')" title="Yellow"></div>
+                            <div class="color-preset" style="background: #48bb78" onclick="selectColor('#48bb78')" title="Green"></div>
+                            <div class="color-preset" style="background: #38b2ac" onclick="selectColor('#38b2ac')" title="Teal"></div>
+                            <div class="color-preset selected" style="background: #667eea" onclick="selectColor('#667eea')" title="Blue"></div>
+                            <div class="color-preset" style="background: #5a67d8" onclick="selectColor('#5a67d8')" title="Indigo"></div>
+                            <div class="color-preset" style="background: #9f7aea" onclick="selectColor('#9f7aea')" title="Purple"></div>
+                            <div class="color-preset" style="background: #ed64a6" onclick="selectColor('#ed64a6')" title="Pink"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" onclick="addCategory()" id="addBtn">
+                    ➕ Create Category
+                </button>
+            </div>
+
+            <!-- Categories List -->
+            <div>
+                <h2 class="section-title">📋 All Categories</h2>
+                <p class="section-subtitle">Manage your existing categories</p>
+
+                <div id="categoriesList">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading categories...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content">
+            <h3 class="modal-title">⚠️ Delete Category?</h3>
+            <p class="modal-text" id="deleteModalText">
+                Are you sure you want to delete this category?
+            </p>
+            <div class="modal-actions">
+                <button class="btn-icon btn-cancel" onclick="closeDeleteModal()">Cancel</button>
+                <button class="btn-icon btn-delete" onclick="confirmDelete()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        let categories = [];
+        let editingCategoryId = null;
+        let deletingCategoryId = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadCategories();
+            loadStats();
+        });
+
+        // Load categories
+        async function loadCategories() {
+            try {
+                const response = await fetch(`${API_BASE}/categories`);
+                const data = await response.json();
+                
+                if (!Array.isArray(data)) {
+                    console.error('Categories is not an array:', data);
+                    categories = [];
+                } else {
+                    categories = data;
+                }
+
+                renderCategories();
+                updateCategoryCount();
+            } catch (error) {
+                console.error('Error loading categories:', error);
+                showAlert('Failed to load categories', 'error');
+                document.getElementById('categoriesList').innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⚠️</div>
+                        <h3>Error loading categories</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Load stats
+        async function loadStats() {
+            try {
+                const [domainsResponse] = await Promise.all([
+                    fetch(`${API_BASE}/domains`)
+                ]);
+                
+                const domains = await domainsResponse.json();
+                const activeDomains = domains.filter(d => d.is_active);
+                const categorized = activeDomains.filter(d => d.category_id);
+                const uncategorized = activeDomains.filter(d => !d.category_id);
+
+                document.getElementById('totalDomains').textContent = categorized.length;
+                document.getElementById('uncategorizedDomains').textContent = uncategorized.length;
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        // Update category count
+        function updateCategoryCount() {
+            document.getElementById('totalCategories').textContent = categories.length;
+        }
+
+        // Render categories
+        function renderCategories() {
+            const container = document.getElementById('categoriesList');
+
+            if (categories.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📁</div>
+                        <h3>No categories yet</h3>
+                        <p>Create your first category above to start organizing domains</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = categories.map(cat => {
+                if (editingCategoryId === cat.id) {
+                    return renderEditForm(cat);
+                }
+                return renderCategoryCard(cat);
+            }).join('');
+        }
+
+        // Render category card
+        function renderCategoryCard(cat) {
+            const domainText = cat.domain_count === 1 ? 'domain' : 'domains';
+            const statsHtml = cat.domain_count > 0 
+                ? `
+                    <span class="stat-badge">${cat.domain_count} ${domainText}</span>
+                    ${cat.safe_count > 0 ? `<span class="stat-badge stat-safe">${cat.safe_count} safe</span>` : ''}
+                    ${cat.flagged_count > 0 ? `<span class="stat-badge stat-flagged">${cat.flagged_count} flagged</span>` : ''}
+                `
+                : '<span class="stat-badge">No domains</span>';
+
+            return `
+                <div class="category-item">
+                    <div class="category-info">
+                        <div class="category-color" style="background: ${cat.color}"></div>
+                        <div class="category-details">
+                            <div class="category-name">${cat.name}</div>
+                            <div class="category-stats">${statsHtml}</div>
+                        </div>
+                    </div>
+                    <div class="category-actions">
+                        <button class="btn-icon btn-edit" onclick="editCategory(${cat.id})">
+                            ✏️ Edit
+                        </button>
+                        <button class="btn-icon btn-delete" onclick="deleteCategory(${cat.id})">
+                            🗑️ Delete
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Render edit form
+        function renderEditForm(cat) {
+            return `
+                <div class="category-item editing">
+                    <div class="category-info">
+                        <div class="edit-form">
+                            <input 
+                                type="color" 
+                                id="editColor${cat.id}" 
+                                value="${cat.color}"
+                            >
+                            <input 
+                                type="text" 
+                                id="editName${cat.id}" 
+                                value="${cat.name}"
+                                maxlength="50"
+                                onkeypress="if(event.key === 'Enter') saveCategory(${cat.id})"
+                            >
+                        </div>
+                    </div>
+                    <div class="category-actions">
+                        <button class="btn-icon btn-save" onclick="saveCategory(${cat.id})">
+                            ✓ Save
+                        </button>
+                        <button class="btn-icon btn-cancel" onclick="cancelEdit()">
+                            ✕ Cancel
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Select color preset
+        function selectColor(color) {
+            document.getElementById('categoryColor').value = color;
+            
+            // Update selected state
+            document.querySelectorAll('.color-preset').forEach(preset => {
+                preset.classList.remove('selected');
+                if (preset.style.background === color) {
+                    preset.classList.add('selected');
+                }
+            });
+        }
+
+        // Add category
+        async function addCategory() {
+            const nameInput = document.getElementById('categoryName');
+            const colorInput = document.getElementById('categoryColor');
+            const addBtn = document.getElementById('addBtn');
+            
+            const name = nameInput.value.trim();
+            const color = colorInput.value;
+
+            if (!name) {
+                showAlert('Please enter a category name', 'warning');
+                nameInput.focus();
+                return;
+            }
+
+            addBtn.disabled = true;
+            addBtn.textContent = '⏳ Creating...';
+
+            try {
+                const response = await fetch(`${API_BASE}/categories`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, color })
+                });
+
+                if (response.ok) {
+                    showAlert(`Category "${name}" created successfully!`, 'success');
+                    nameInput.value = '';
+                    colorInput.value = '#667eea';
+                    selectColor('#667eea');
+                    loadCategories();
+                    loadStats();
+                } else {
+                    const error = await response.json();
+                    showAlert(error.error || 'Failed to create category', 'error');
+                }
+            } catch (error) {
+                console.error('Error adding category:', error);
+                showAlert('Failed to create category', 'error');
+            } finally {
+                addBtn.disabled = false;
+                addBtn.textContent = '➕ Create Category';
+            }
+        }
+
+        // Edit category
+        function editCategory(id) {
+            editingCategoryId = id;
+            renderCategories();
+            
+            // Focus on name input
+            setTimeout(() => {
+                const input = document.getElementById(`editName${id}`);
+                if (input) {
+                    input.focus();
+                    input.select();
+                }
+            }, 100);
+        }
+
+        // Cancel edit
+        function cancelEdit() {
+            editingCategoryId = null;
+            renderCategories();
+        }
+
+        // Save category
+        async function saveCategory(id) {
+            const name = document.getElementById(`editName${id}`).value.trim();
+            const color = document.getElementById(`editColor${id}`).value;
+
+            if (!name) {
+                showAlert('Category name cannot be empty', 'warning');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/categories/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, color })
+                });
+
+                if (response.ok) {
+                    showAlert('Category updated successfully!', 'success');
+                    editingCategoryId = null;
+                    loadCategories();
+                } else {
+                    const error = await response.json();
+                    showAlert(error.error || 'Failed to update category', 'error');
+                }
+            } catch (error) {
+                console.error('Error updating category:', error);
+                showAlert('Failed to update category', 'error');
+            }
+        }
+
+        // Delete category
+        function deleteCategory(id) {
+            const category = categories.find(c => c.id === id);
+            deletingCategoryId = id;
+            
+            const modal = document.getElementById('deleteModal');
+            const text = document.getElementById('deleteModalText');
+            
+            if (category.domain_count > 0) {
+                text.innerHTML = `
+                    <strong>${category.name}</strong> contains <strong>${category.domain_count}</strong> domain(s).<br><br>
+                    These domains will be moved to "Uncategorized".<br><br>
+                    Do you want to continue?
+                `;
+            } else {
+                text.innerHTML = `Are you sure you want to delete <strong>${category.name}</strong>?`;
+            }
+            
+            modal.classList.add('active');
+        }
+
+        // Confirm delete
+        async function confirmDelete() {
+            try {
+                const response = await fetch(`${API_BASE}/categories/${deletingCategoryId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    showAlert(result.message, 'success');
+                    closeDeleteModal();
+                    loadCategories();
+                    loadStats();
+                } else {
+                    const error = await response.json();
+                    showAlert(error.error || 'Failed to delete category', 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting category:', error);
+                showAlert('Failed to delete category', 'error');
+            }
+        }
+
+        // Close delete modal
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').classList.remove('active');
+            deletingCategoryId = null;
+        }
+
+        // Show alert
+        function showAlert(message, type = 'success') {
+            const alertBox = document.getElementById('alertBox');
+            alertBox.className = `alert alert-${type}`;
+            alertBox.textContent = message;
+            alertBox.style.display = 'block';
+
+            setTimeout(() => {
+                alertBox.style.display = 'none';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
