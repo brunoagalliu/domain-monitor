@@ -14,28 +14,34 @@ module.exports = async (req, res) => {
   try {
     // GET - Get all categories with domain counts
     if (req.method === 'GET') {
-      const [categories] = await db.execute(`
-        SELECT 
-          c.id,
-          c.name,
-          c.color,
-          c.created_at,
-          COUNT(DISTINCT d.id) as domain_count,
-          SUM(CASE WHEN sr.is_safe = 1 THEN 1 ELSE 0 END) as safe_count,
-          SUM(CASE WHEN sr.is_safe = 0 THEN 1 ELSE 0 END) as flagged_count
-        FROM categories c
-        LEFT JOIN domains d ON c.id = d.category_id AND d.is_active = true
-        LEFT JOIN scan_results sr ON d.id = sr.domain_id 
-          AND sr.id = (
-            SELECT MAX(sr2.id) 
-            FROM scan_results sr2 
-            WHERE sr2.domain_id = d.id
-          )
-        GROUP BY c.id, c.name, c.color, c.created_at
-        ORDER BY c.name
-      `);
-      
-      return res.status(200).json(categories);
+      try {
+        const [categories] = await db.execute(`
+          SELECT 
+            c.id,
+            c.name,
+            c.color,
+            c.created_at,
+            COUNT(DISTINCT d.id) as domain_count,
+            COALESCE(SUM(CASE WHEN sr.is_safe = 1 THEN 1 ELSE 0 END), 0) as safe_count,
+            COALESCE(SUM(CASE WHEN sr.is_safe = 0 THEN 1 ELSE 0 END), 0) as flagged_count
+          FROM categories c
+          LEFT JOIN domains d ON c.id = d.category_id AND d.is_active = true
+          LEFT JOIN scan_results sr ON d.id = sr.domain_id 
+            AND sr.id = (
+              SELECT MAX(sr2.id) 
+              FROM scan_results sr2 
+              WHERE sr2.domain_id = d.id
+            )
+          GROUP BY c.id, c.name, c.color, c.created_at
+          ORDER BY c.name
+        `);
+        
+        // Ensure we return an array
+        return res.status(200).json(Array.isArray(categories) ? categories : []);
+      } catch (error) {
+        console.error('Error fetching categories:', error);
+        throw error;
+      }
     }
     
     // POST - Create new category
