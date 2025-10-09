@@ -1,10 +1,12 @@
 const db = require('./db');
 const SafeBrowsingChecker = require('./safe-browsing');
+const TelegramNotifier = require('./telegram-notifier');
 require('dotenv').config();
 
 class DomainMonitor {
   constructor() {
     this.checker = new SafeBrowsingChecker();
+    this.telegram = new TelegramNotifier();
   }
 
   async addDomain(domain, notes = '', categoryId = null) {
@@ -75,7 +77,7 @@ class DomainMonitor {
       
       if (domains.length === 0) {
         console.log('ℹ️ No domains to scan');
-        return { scanned: 0, safe: 0, flagged: 0 };
+        return { scanned: 0, safe: 0, flagged: 0, newFlags: 0 };
       }
 
       console.log(`📋 Scanning ${domains.length} domain(s)...`);
@@ -85,15 +87,38 @@ class DomainMonitor {
       
       let safeCount = 0;
       let flaggedCount = 0;
+      let newlyFlaggedDomains = [];
 
       // Save results for each domain
       for (const domain of domains) {
         const result = results[domain.domain];
         
+        // Check if this is a NEW flag (was safe before, now flagged)
+        const [previousScan] = await db.execute(
+          `SELECT is_safe FROM scan_results 
+           WHERE domain_id = ? 
+           ORDER BY scan_date DESC 
+           LIMIT 1`,
+          [domain.id]
+        );
+
+        const wasPreviouslySafe = previousScan.length === 0 || previousScan[0].is_safe === 1;
+        const isNowFlagged = !result.is_safe;
+
         if (result.is_safe) {
           safeCount++;
         } else {
           flaggedCount++;
+          
+          // Track newly flagged domains
+          if (wasPreviouslySafe && isNowFlagged) {
+            newlyFlaggedDomains.push({
+              domain: domain.domain,
+              category: domain.category_name,
+              threats: result.threats.map(t => t.threatType || null).filter(Boolean),
+              scanDate: new Date()
+            });
+          }
         }
         
         // Save scan result to database
@@ -126,12 +151,26 @@ class DomainMonitor {
 
       console.log('─'.repeat(50));
       console.log(`📊 Scan Summary: ${safeCount} safe, ${flaggedCount} flagged`);
+      
+      // Send Telegram notification for newly flagged domains
+      if (newlyFlaggedDomains.length > 0) {
+        console.log(`📱 Sending Telegram alert for ${newlyFlaggedDomains.length} newly flagged domain(s)...`);
+        try {
+          await this.telegram.notifyFlaggedDomains(newlyFlaggedDomains);
+          console.log('✅ Telegram notification sent');
+        } catch (error) {
+          console.error('⚠️ Telegram notification failed:', error.message);
+          // Don't throw - continue even if notification fails
+        }
+      }
+
       console.log(`✨ Scan completed at ${new Date().toLocaleTimeString()}\n`);
       
       return { 
         scanned: domains.length, 
         safe: safeCount, 
-        flagged: flaggedCount 
+        flagged: flaggedCount,
+        newFlags: newlyFlaggedDomains.length
       };
     } catch (error) {
       console.error('❌ Scan error:', error.message);
