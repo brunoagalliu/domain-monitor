@@ -12,41 +12,71 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // GET - Get all categories with domain counts
+    // GET - Get all categories
     if (req.method === 'GET') {
-      try {
-        const [categories] = await db.execute(`
-          SELECT 
-            c.id,
-            c.name,
-            c.color,
-            c.created_at,
-            COUNT(DISTINCT d.id) as domain_count,
-            COALESCE(SUM(CASE WHEN sr.is_safe = 1 THEN 1 ELSE 0 END), 0) as safe_count,
-            COALESCE(SUM(CASE WHEN sr.is_safe = 0 THEN 1 ELSE 0 END), 0) as flagged_count
-          FROM categories c
-          LEFT JOIN domains d ON c.id = d.category_id AND d.is_active = true
-          LEFT JOIN scan_results sr ON d.id = sr.domain_id 
-            AND sr.id = (
-              SELECT MAX(sr2.id) 
-              FROM scan_results sr2 
-              WHERE sr2.domain_id = d.id
-            )
-          GROUP BY c.id, c.name, c.color, c.created_at
-          ORDER BY c.name
-        `);
-        
-        // Ensure we return an array
-        if (!Array.isArray(categories)) {
-          console.error('Categories query did not return an array:', categories);
-          return res.status(200).json([]);
+      console.log('📂 Fetching categories...');
+      
+      // Start with simple query
+      const [categories] = await db.execute(`
+        SELECT 
+          c.id,
+          c.name,
+          c.color,
+          c.created_at
+        FROM categories c
+        ORDER BY c.name
+      `);
+      
+      console.log('✅ Found', categories.length, 'categories');
+      
+      // Add domain counts separately (safer)
+      for (let cat of categories) {
+        try {
+          const [domainCount] = await db.execute(
+            'SELECT COUNT(*) as count FROM domains WHERE category_id = ? AND is_active = true',
+            [cat.id]
+          );
+          cat.domain_count = domainCount[0].count || 0;
+          
+          // Try to get safe/flagged counts
+          const [safeCount] = await db.execute(`
+            SELECT COUNT(DISTINCT d.id) as count
+            FROM domains d
+            JOIN scan_results sr ON d.id = sr.domain_id
+            WHERE d.category_id = ? 
+              AND d.is_active = true
+              AND sr.is_safe = 1
+              AND sr.id = (
+                SELECT MAX(sr2.id) 
+                FROM scan_results sr2 
+                WHERE sr2.domain_id = d.id
+              )
+          `, [cat.id]);
+          cat.safe_count = safeCount[0].count || 0;
+          
+          const [flaggedCount] = await db.execute(`
+            SELECT COUNT(DISTINCT d.id) as count
+            FROM domains d
+            JOIN scan_results sr ON d.id = sr.domain_id
+            WHERE d.category_id = ? 
+              AND d.is_active = true
+              AND sr.is_safe = 0
+              AND sr.id = (
+                SELECT MAX(sr2.id) 
+                FROM scan_results sr2 
+                WHERE sr2.domain_id = d.id
+              )
+          `, [cat.id]);
+          cat.flagged_count = flaggedCount[0].count || 0;
+        } catch (countError) {
+          console.warn('Error getting counts for category', cat.id, ':', countError.message);
+          cat.domain_count = 0;
+          cat.safe_count = 0;
+          cat.flagged_count = 0;
         }
-        
-        return res.status(200).json(categories);
-      } catch (error) {
-        console.error('Error fetching categories:', error);
-        return res.status(200).json([]); // Return empty array on error
       }
+      
+      return res.status(200).json(categories);
     }
     
     // POST - Create new category
@@ -85,6 +115,8 @@ module.exports = async (req, res) => {
         'INSERT INTO categories (name, color) VALUES (?, ?)',
         [name.trim(), finalColor]
       );
+      
+      console.log('✅ Category created:', name);
       
       return res.status(201).json({ 
         message: 'Category created successfully',
@@ -160,6 +192,8 @@ module.exports = async (req, res) => {
         values
       );
       
+      console.log('✅ Category updated:', id);
+      
       return res.status(200).json({ 
         message: 'Category updated successfully',
         id: parseInt(id)
@@ -191,7 +225,7 @@ module.exports = async (req, res) => {
       );
       
       if (domains[0].count > 0) {
-        // Don't delete, just unassign domains
+        // Unassign domains from category
         await db.execute(
           'UPDATE domains SET category_id = NULL WHERE category_id = ?',
           [id]
@@ -200,6 +234,8 @@ module.exports = async (req, res) => {
       
       // Delete category
       await db.execute('DELETE FROM categories WHERE id = ?', [id]);
+      
+      console.log('✅ Category deleted:', id);
       
       return res.status(200).json({ 
         message: 'Category deleted successfully',
@@ -210,10 +246,17 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
     
   } catch (error) {
-    console.error('Error in /api/categories:', error);
+    console.error('❌ Error in /api/categories:', error);
     
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(400).json({ error: 'Category already exists' });
+    }
+    
+    if (error.code === 'ER_NO_SUCH_TABLE') {
+      return res.status(500).json({ 
+        error: 'Categories table does not exist. Run setup-db.js',
+        code: error.code
+      });
     }
     
     return res.status(500).json({ 
