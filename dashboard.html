@@ -629,25 +629,15 @@
         async function loadCategories() {
             try {
                 const response = await fetch(`${API_BASE}/categories`);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
                 const data = await response.json();
                 
                 // Ensure categories is an array
-                if (Array.isArray(data)) {
-                    categories = data;
-                } else if (data && typeof data === 'object') {
-                    // If it's an object, try to extract array
-                    categories = Object.values(data);
-                } else {
-                    console.error('Invalid categories format:', data);
+                if (!Array.isArray(data)) {
+                    console.error('Categories is not an array:', data);
                     categories = [];
+                } else {
+                    categories = data;
                 }
-                
-                console.log('Categories loaded:', categories.length);
                 
                 // Populate category dropdown
                 const select = document.getElementById('categorySelect');
@@ -664,9 +654,8 @@
                 renderCategoryPills();
             } catch (error) {
                 console.error('Error loading categories:', error);
-                showAlert('Failed to load categories: ' + error.message, 'error');
-                categories = []; // Set to empty array to prevent errors
-                renderCategoryPills();
+                categories = [];
+                showAlert('Failed to load categories', 'error');
             }
         }
 

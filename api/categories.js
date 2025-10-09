@@ -37,10 +37,15 @@ module.exports = async (req, res) => {
         `);
         
         // Ensure we return an array
-        return res.status(200).json(Array.isArray(categories) ? categories : []);
+        if (!Array.isArray(categories)) {
+          console.error('Categories query did not return an array:', categories);
+          return res.status(200).json([]);
+        }
+        
+        return res.status(200).json(categories);
       } catch (error) {
         console.error('Error fetching categories:', error);
-        throw error;
+        return res.status(200).json([]); // Return empty array on error
       }
     }
     
