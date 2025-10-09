@@ -21,6 +21,21 @@ if (host && host.includes(':')) {
   port = parseInt(parts[1]) || port;
 }
 
+// SSL Configuration - handle multiple scenarios
+let sslConfig;
+if (process.env.MYSQL_SSL === 'true') {
+  // SSL required and supported
+  sslConfig = {
+    rejectUnauthorized: false  // Accept self-signed certificates
+  };
+} else if (process.env.MYSQL_SSL === 'false') {
+  // Explicitly disabled
+  sslConfig = undefined;
+} else {
+  // Not specified - don't use SSL (most compatible)
+  sslConfig = undefined;
+}
+
 // Database configuration
 const dbConfig = {
   host: host,
@@ -29,17 +44,14 @@ const dbConfig = {
   password: process.env.MYSQL_PASSWORD,
   database: process.env.MYSQL_DATABASE,
   waitForConnections: true,
-  connectionLimit: 5,        // Increased slightly for serverless
+  connectionLimit: 5,
   maxIdle: 2,
   idleTimeout: 60000,
   queueLimit: 0,
   enableKeepAlive: true,
   keepAliveInitialDelay: 0,
-  connectTimeout: 30000,     // 30 seconds
-  // SSL configuration
-  ssl: process.env.MYSQL_SSL === 'true' ? {
-    rejectUnauthorized: true
-  } : undefined
+  connectTimeout: 30000,
+  ssl: sslConfig
 };
 
 console.log('📊 Database Configuration:');
@@ -47,7 +59,7 @@ console.log('  Host:', host);
 console.log('  Port:', port);
 console.log('  User:', process.env.MYSQL_USER);
 console.log('  Database:', process.env.MYSQL_DATABASE);
-console.log('  SSL:', process.env.MYSQL_SSL === 'true' ? 'enabled' : 'disabled');
+console.log('  SSL:', sslConfig ? 'enabled' : 'disabled');
 
 // Create connection pool
 let pool;
@@ -59,20 +71,20 @@ try {
   throw error;
 }
 
-// Test connection on initialization (with better error handling)
+// Test connection on initialization
 pool.getConnection()
   .then(conn => {
     console.log('✅ Database test connection successful');
-    return conn.execute('SELECT 1 as test');
-  })
-  .then(([rows, fields]) => {
-    console.log('✅ Database query test successful');
+    return conn.execute('SELECT 1 as test')
+      .then(() => {
+        conn.release();
+        console.log('✅ Database query test successful');
+      });
   })
   .catch(err => {
     console.error('❌ Database connection test failed:');
     console.error('   Error Code:', err.code);
     console.error('   Error Message:', err.message);
-    console.error('   Error Number:', err.errno);
     
     // Common error codes and solutions
     if (err.code === 'ECONNREFUSED') {
@@ -83,11 +95,9 @@ pool.getConnection()
       console.error('   🔍 Solution: Check if hostname is correct');
     } else if (err.code === 'ETIMEDOUT') {
       console.error('   🔍 Solution: Check firewall rules and network access');
+    } else if (err.message.includes('secure connection')) {
+      console.error('   🔍 Solution: Set MYSQL_SSL=false in environment variables');
     }
-  })
-  .finally(() => {
-    // Don't close pool here, keep it open for requests
   });
 
-// Export pool for use in other modules
 module.exports = pool;
