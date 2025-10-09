@@ -85,6 +85,7 @@
             border-radius: 16px;
             padding: 30px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
         }
 
         .add-domain-section {
@@ -117,6 +118,88 @@
 
         .category-select {
             flex: 0.5;
+        }
+
+        /* Filter Section */
+        .filter-section {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .filter-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .filter-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .filter-dropdown {
+            min-width: 200px;
+            padding: 10px 14px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .filter-dropdown:hover {
+            border-color: #cbd5e0;
+        }
+
+        .filter-dropdown:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        /* Category Pills */
+        .category-pills {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .category-pill {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .category-pill:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .category-pill.active {
+            border-color: currentColor;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            transform: scale(1.05);
+        }
+
+        .category-pill-count {
+            background: rgba(255, 255, 255, 0.3);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
         }
 
         .btn {
@@ -418,6 +501,27 @@
             border-radius: 50%;
             animation: pulse 2s infinite;
         }
+
+        .filter-info {
+            font-size: 14px;
+            color: #718096;
+            font-style: italic;
+        }
+
+        .clear-filter {
+            padding: 6px 12px;
+            background: #e2e8f0;
+            color: #4a5568;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .clear-filter:hover {
+            background: #cbd5e0;
+        }
     </style>
 </head>
 <body>
@@ -476,12 +580,27 @@
                 </div>
             </div>
 
-            <div class="section-header">
-                <h2 class="section-title">Monitored Domains</h2>
+            <!-- Filter Section -->
+            <div class="filter-section">
+                <div class="filter-controls">
+                    <span class="filter-label">Filter by:</span>
+                    <div class="category-pills" id="categoryPills">
+                        <div class="category-pill active" onclick="filterByCategory(null)" 
+                             style="background: #667eea; color: white;">
+                            All Categories
+                            <span class="category-pill-count" id="allCount">0</span>
+                        </div>
+                    </div>
+                </div>
                 <div class="auto-scan-indicator active">
                     <div class="pulse-dot"></div>
                     <span>Auto-scan: Every hour</span>
                 </div>
+            </div>
+
+            <div class="section-header">
+                <h2 class="section-title">Monitored Domains</h2>
+                <span class="filter-info" id="filterInfo"></span>
             </div>
 
             <div id="domainsContainer">
@@ -494,20 +613,16 @@
     </div>
 
     <script>
-        // API Configuration - Update this to match your server
-        //const API_BASE = 'https://domain.trackthisclicks.com';
-        //const API_BASE = 'http://localhost:3306';
         const API_BASE = '/api';
-
         let domains = [];
         let categories = [];
         let isScanning = false;
+        let currentFilter = null; // null = all, or category ID
 
         // Initialize dashboard
         document.addEventListener('DOMContentLoaded', () => {
             loadCategories();
             loadDomains();
-            // Refresh every 30 seconds
             setInterval(loadDomains, 30000);
         });
 
@@ -526,85 +641,119 @@
                     option.style.color = cat.color;
                     select.appendChild(option);
                 });
+
+                // Render category pills
+                renderCategoryPills();
             } catch (error) {
                 console.error('Error loading categories:', error);
             }
         }
 
-        // In dashboard.html, replace the loadDomains function with this:
+        function renderCategoryPills() {
+            const container = document.getElementById('categoryPills');
+            
+            // All categories pill
+            let html = `
+                <div class="category-pill ${currentFilter === null ? 'active' : ''}" 
+                     onclick="filterByCategory(null)" 
+                     style="background: #667eea; color: white;">
+                    All Categories
+                    <span class="category-pill-count" id="allCount">0</span>
+                </div>
+            `;
+
+            // Individual category pills
+            categories.forEach(cat => {
+                const isActive = currentFilter === cat.id ? 'active' : '';
+                html += `
+                    <div class="category-pill ${isActive}" 
+                         onclick="filterByCategory(${cat.id})" 
+                         style="background: ${cat.color}; color: white;">
+                        ${cat.name}
+                        <span class="category-pill-count" id="count-${cat.id}">0</span>
+                    </div>
+                `;
+            });
+
+            // Uncategorized pill
+            const uncatActive = currentFilter === 'uncategorized' ? 'active' : '';
+            html += `
+                <div class="category-pill ${uncatActive}" 
+                     onclick="filterByCategory('uncategorized')" 
+                     style="background: #a0aec0; color: white;">
+                    Uncategorized
+                    <span class="category-pill-count" id="uncatCount">0</span>
+                </div>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        function filterByCategory(categoryId) {
+            currentFilter = categoryId;
+            renderCategoryPills();
+            renderDomains();
+            
+            // Update filter info
+            const filterInfo = document.getElementById('filterInfo');
+            if (categoryId === null) {
+                filterInfo.textContent = 'Showing all domains';
+            } else if (categoryId === 'uncategorized') {
+                filterInfo.textContent = 'Showing uncategorized domains';
+            } else {
+                const cat = categories.find(c => c.id === categoryId);
+                filterInfo.textContent = `Showing: ${cat?.name || 'Unknown'}`;
+            }
+        }
 
         async function loadDomains() {
             try {
-                console.log('Fetching domains from:', `${API_BASE}/domains`);
                 const response = await fetch(`${API_BASE}/domains`);
-                
-                // Check if response is ok
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('Response not OK:', response.status, errorText);
-                    throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
-                }
-                
-                // Check content type
-                const contentType = response.headers.get('content-type');
-                if (!contentType || !contentType.includes('application/json')) {
-                    const text = await response.text();
-                    console.error('Not JSON response:', text.substring(0, 200));
-                    throw new Error('Server returned non-JSON response. Check server logs.');
-                }
+                if (!response.ok) throw new Error('Failed to fetch domains');
                 
                 const data = await response.json();
-                console.log('Domains loaded:', data.length);
                 
-                // Get recent scans for status
-                console.log('Fetching scans from:', `${API_BASE}/scans?limit=100`);
                 const scansResponse = await fetch(`${API_BASE}/scans?limit=100`);
-                
-                if (!scansResponse.ok) {
-                    console.warn('Scans fetch failed, continuing with domains only');
-                    domains = data.map(domain => ({
-                        ...domain,
-                        status: 'unknown',
-                        lastScan: null,
-                        threats: null
-                    }));
-                } else {
-                    const scans = await scansResponse.json();
-                    console.log('Scans loaded:', scans.length);
-                    
-                    // Map scan results to domains
-                    domains = data.map(domain => {
-                        const latestScan = scans.find(s => s.domain === domain.domain);
-                        return {
-                            ...domain,
-                            status: latestScan ? (latestScan.is_safe ? 'safe' : 'flagged') : 'unknown',
-                            lastScan: latestScan ? latestScan.scan_date : null,
-                            threats: latestScan ? latestScan.threat_types : null
-                        };
-                    });
+                let scans = [];
+                if (scansResponse.ok) {
+                    scans = await scansResponse.json();
                 }
+                
+                domains = data.map(domain => {
+                    const latestScan = scans.find(s => s.domain === domain.domain);
+                    return {
+                        ...domain,
+                        status: latestScan ? (latestScan.is_safe ? 'safe' : 'flagged') : 'unknown',
+                        lastScan: latestScan ? latestScan.scan_date : null,
+                        threats: latestScan ? latestScan.threat_types : null
+                    };
+                });
 
                 updateStats();
+                updateCategoryCounts();
                 renderDomains();
             } catch (error) {
                 console.error('Error loading domains:', error);
-                showAlert(`Error: ${error.message}. Check browser console for details.`, 'error');
-                
-                // Show error in the domains container
-                const container = document.getElementById('domainsContainer');
-                container.innerHTML = `
-                    <div style="padding: 40px; text-align: center; color: #e53e3e;">
-                        <h3>⚠️ Error Loading Domains</h3>
-                        <p style="margin-top: 10px; color: #718096;">${error.message}</p>
-                        <p style="margin-top: 10px; font-size: 14px; color: #a0aec0;">
-                            Check the browser console (F12) for more details.
-                        </p>
-                        <button class="btn btn-primary" onclick="loadDomains()" style="margin-top: 20px;">
-                            Retry
-                        </button>
-                    </div>
-                `;
+                showAlert(`Error: ${error.message}`, 'error');
             }
+        }
+
+        function updateCategoryCounts() {
+            const activeDomains = domains.filter(d => d.is_active);
+            
+            // All count
+            document.getElementById('allCount').textContent = activeDomains.length;
+            
+            // Category counts
+            categories.forEach(cat => {
+                const count = activeDomains.filter(d => d.category_id === cat.id).length;
+                const elem = document.getElementById(`count-${cat.id}`);
+                if (elem) elem.textContent = count;
+            });
+            
+            // Uncategorized count
+            const uncatCount = activeDomains.filter(d => !d.category_id).length;
+            document.getElementById('uncatCount').textContent = uncatCount;
         }
 
         function updateStats() {
@@ -621,16 +770,26 @@
 
         function renderDomains() {
             const container = document.getElementById('domainsContainer');
-            const activeDomains = domains.filter(d => d.is_active);
+            let activeDomains = domains.filter(d => d.is_active);
+
+            // Apply filter
+            if (currentFilter !== null) {
+                if (currentFilter === 'uncategorized') {
+                    activeDomains = activeDomains.filter(d => !d.category_id);
+                } else {
+                    activeDomains = activeDomains.filter(d => d.category_id === currentFilter);
+                }
+            }
 
             if (activeDomains.length === 0) {
+                const filterText = currentFilter !== null ? 'No domains in this category' : 'No domains added yet';
                 container.innerHTML = `
                     <div class="empty-state">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
                         </svg>
-                        <h3>No domains added yet</h3>
-                        <p>Add your first domain above to start monitoring</p>
+                        <h3>${filterText}</h3>
+                        ${currentFilter !== null ? '<button class="clear-filter" onclick="filterByCategory(null)">Show All Domains</button>' : '<p>Add your first domain above to start monitoring</p>'}
                     </div>
                 `;
                 return;
