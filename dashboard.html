@@ -80,6 +80,167 @@
         .stat-total { color: #667eea; }
         .stat-pending { color: #ed8936; }
 
+        /* Flagged Domains Alert Section */
+        .flagged-alert {
+            background: linear-gradient(135deg, #fed7d7 0%, #feb2b2 100%);
+            border: 2px solid #fc8181;
+            border-radius: 16px;
+            padding: 25px 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 20px rgba(245, 101, 101, 0.2);
+            display: none; /* Hidden by default */
+        }
+
+        .flagged-alert.show {
+            display: block;
+            animation: slideDown 0.5s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .flagged-alert-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .flagged-alert-icon {
+            font-size: 32px;
+            animation: pulse-warning 2s infinite;
+        }
+
+        @keyframes pulse-warning {
+            0%, 100% { 
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% { 
+                transform: scale(1.1);
+                opacity: 0.8;
+            }
+        }
+
+        .flagged-alert-title {
+            flex: 1;
+        }
+
+        .flagged-alert-title h2 {
+            color: #742a2a;
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .flagged-alert-title p {
+            color: #9b2c2c;
+            font-size: 14px;
+        }
+
+        .flagged-domains-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .flagged-domain-card {
+            background: white;
+            border-left: 4px solid #f56565;
+            border-radius: 8px;
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .flagged-domain-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .flagged-domain-info {
+            flex: 1;
+        }
+
+        .flagged-domain-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #742a2a;
+            margin-bottom: 5px;
+        }
+
+        .flagged-domain-threats {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+
+        .threat-badge {
+            padding: 4px 10px;
+            background: #fed7d7;
+            color: #742a2a;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .flagged-domain-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-view {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-view:hover {
+            background: #5a67d8;
+        }
+
+        .flagged-alert-actions {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #feb2b2;
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .btn-rescan {
+            padding: 10px 20px;
+            background: white;
+            color: #742a2a;
+            border: 2px solid #742a2a;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-rescan:hover {
+            background: #742a2a;
+            color: white;
+        }
+
         .main-card {
             background: white;
             border-radius: 16px;
@@ -621,8 +782,12 @@
 
         // Initialize dashboard
         document.addEventListener('DOMContentLoaded', () => {
-            loadCategories();
-            loadDomains();
+            // Load categories first, then domains
+            loadCategories().then(() => {
+                loadDomains();
+            });
+            
+            // Refresh every 30 seconds
             setInterval(loadDomains, 30000);
         });
 
@@ -639,23 +804,30 @@
                     categories = data;
                 }
                 
+                console.log('✅ Loaded', categories.length, 'categories');
+                
                 // Populate category dropdown
                 const select = document.getElementById('categorySelect');
-                select.innerHTML = '<option value="">No Category</option>';
-                categories.forEach(cat => {
-                    const option = document.createElement('option');
-                    option.value = cat.id;
-                    option.textContent = cat.name;
-                    option.style.color = cat.color;
-                    select.appendChild(option);
-                });
+                if (select) {
+                    select.innerHTML = '<option value="">No Category</option>';
+                    categories.forEach(cat => {
+                        const option = document.createElement('option');
+                        option.value = cat.id;
+                        option.textContent = cat.name;
+                        option.style.color = cat.color;
+                        select.appendChild(option);
+                    });
+                }
 
                 // Render category pills
                 renderCategoryPills();
+                
+                return categories; // Return for chaining
             } catch (error) {
                 console.error('Error loading categories:', error);
                 categories = [];
                 showAlert('Failed to load categories', 'error');
+                return [];
             }
         }
 
@@ -740,7 +912,12 @@
                 });
 
                 updateStats();
-                updateCategoryCounts();
+                
+                // Only update counts if category pills exist
+                if (document.getElementById('categoryPills')) {
+                    updateCategoryCounts();
+                }
+                
                 renderDomains();
             } catch (error) {
                 console.error('Error loading domains:', error);
@@ -752,18 +929,26 @@
             const activeDomains = domains.filter(d => d.is_active);
             
             // All count
-            document.getElementById('allCount').textContent = activeDomains.length;
+            const allCountElem = document.getElementById('allCount');
+            if (allCountElem) {
+                allCountElem.textContent = activeDomains.length;
+            }
             
             // Category counts
             categories.forEach(cat => {
                 const count = activeDomains.filter(d => d.category_id === cat.id).length;
                 const elem = document.getElementById(`count-${cat.id}`);
-                if (elem) elem.textContent = count;
+                if (elem) {
+                    elem.textContent = count;
+                }
             });
             
             // Uncategorized count
-            const uncatCount = activeDomains.filter(d => !d.category_id).length;
-            document.getElementById('uncatCount').textContent = uncatCount;
+            const uncatCountElem = document.getElementById('uncatCount');
+            if (uncatCountElem) {
+                const uncatCount = activeDomains.filter(d => !d.category_id).length;
+                uncatCountElem.textContent = uncatCount;
+            }
         }
 
         function updateStats() {
