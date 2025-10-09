@@ -1,10 +1,11 @@
-const DomainMonitor = require('./monitor');
+const DomainMonitor = require('../monitor');
 
 module.exports = async (req, res) => {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Content-Type', 'application/json');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -16,7 +17,7 @@ module.exports = async (req, res) => {
     if (req.method === 'GET') {
       // Get all categories
       const categories = await monitor.getCategories();
-      return res.json(categories);
+      return res.status(200).json(categories);
     }
     
     if (req.method === 'POST') {
@@ -27,20 +28,26 @@ module.exports = async (req, res) => {
         return res.status(400).json({ error: 'Category name is required' });
       }
       
-      const categoryId = await monitor.addCategory(name, color);
-      return res.json({ 
+      const categoryId = await monitor.addCategory(name, color || '#667eea');
+      return res.status(200).json({ 
         message: 'Category added successfully', 
         id: categoryId,
-        name: name 
+        name: name,
+        color: color || '#667eea'
       });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
     console.error('Error in /api/categories:', error);
+    
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(400).json({ error: 'Category already exists' });
     }
-    return res.status(500).json({ error: error.message });
+    
+    return res.status(500).json({ 
+      error: error.message,
+      code: error.code 
+    });
   }
 };

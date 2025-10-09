@@ -44,7 +44,8 @@ const pool = mysql.createPool({
   queueLimit: 0,
   enableKeepAlive: true,
   keepAliveInitialDelay: 0,
-  connectTimeout: 20000,  // Increased timeout to 20 seconds
+  connectTimeout: 30000,  // Increased timeout to 30 seconds
+  acquireTimeout: 30000,
   // SSL support for cloud databases
   ssl: process.env.MYSQL_SSL === 'true' ? {
     rejectUnauthorized: false
