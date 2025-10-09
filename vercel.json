@@ -21,13 +21,5 @@
       "path": "/api/cron",
       "schedule": "0 * * * *"
     }
-  ],
-  "env": {
-    "MYSQL_HOST": "@mysql_host",
-    "MYSQL_USER": "@mysql_user",
-    "MYSQL_PASSWORD": "@mysql_password",
-    "MYSQL_DATABASE": "@mysql_database",
-    "GOOGLE_API_KEY": "@google_api_key",
-    "CRON_SECRET": "@cron_secret"
-  }
+  ]
 }
