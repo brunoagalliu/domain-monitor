@@ -2,19 +2,17 @@ const mysql = require('mysql2/promise');
 require('dotenv').config();
 
 // Validate environment variables
-if (!process.env.MYSQL_HOST) {
-  console.error('Missing MYSQL_HOST environment variable');
-}
-if (!process.env.MYSQL_USER) {
-  console.error('Missing MYSQL_USER environment variable');
-}
-if (!process.env.MYSQL_DATABASE) {
-  console.error('Missing MYSQL_DATABASE environment variable');
+const requiredVars = ['MYSQL_HOST', 'MYSQL_USER', 'MYSQL_DATABASE'];
+const missingVars = requiredVars.filter(v => !process.env[v]);
+
+if (missingVars.length > 0) {
+  console.error('❌ Missing required environment variables:', missingVars.join(', '));
+  throw new Error(`Missing environment variables: ${missingVars.join(', ')}`);
 }
 
 // Parse host and port
 let host = process.env.MYSQL_HOST;
-let port = process.env.MYSQL_PORT || 3306;
+let port = parseInt(process.env.MYSQL_PORT) || 3306;
 
 // If host contains port (e.g., "host:3307"), split them
 if (host && host.includes(':')) {
@@ -23,47 +21,73 @@ if (host && host.includes(':')) {
   port = parseInt(parts[1]) || port;
 }
 
-console.log('Database config:', {
-  host,
-  port,
-  user: process.env.MYSQL_USER,
-  database: process.env.MYSQL_DATABASE
-});
-
-// For serverless, use smaller connection pool
-const pool = mysql.createPool({
+// Database configuration
+const dbConfig = {
   host: host,
   port: port,
   user: process.env.MYSQL_USER,
   password: process.env.MYSQL_PASSWORD,
   database: process.env.MYSQL_DATABASE,
   waitForConnections: true,
-  connectionLimit: 2,  // Reduced for serverless
+  connectionLimit: 5,        // Increased slightly for serverless
   maxIdle: 2,
   idleTimeout: 60000,
   queueLimit: 0,
   enableKeepAlive: true,
   keepAliveInitialDelay: 0,
-  connectTimeout: 30000,  // Increased timeout to 30 seconds
-  acquireTimeout: 30000,
-  // SSL support for cloud databases
+  connectTimeout: 30000,     // 30 seconds
+  // SSL configuration
   ssl: process.env.MYSQL_SSL === 'true' ? {
-    rejectUnauthorized: false
+    rejectUnauthorized: true
   } : undefined
-});
+};
 
-// Test connection on initialization (optional, for debugging)
+console.log('📊 Database Configuration:');
+console.log('  Host:', host);
+console.log('  Port:', port);
+console.log('  User:', process.env.MYSQL_USER);
+console.log('  Database:', process.env.MYSQL_DATABASE);
+console.log('  SSL:', process.env.MYSQL_SSL === 'true' ? 'enabled' : 'disabled');
+
+// Create connection pool
+let pool;
+try {
+  pool = mysql.createPool(dbConfig);
+  console.log('✅ Database connection pool created');
+} catch (error) {
+  console.error('❌ Failed to create connection pool:', error.message);
+  throw error;
+}
+
+// Test connection on initialization (with better error handling)
 pool.getConnection()
   .then(conn => {
-    console.log('✅ Database connection pool created successfully');
-    conn.release();
+    console.log('✅ Database test connection successful');
+    return conn.execute('SELECT 1 as test');
+  })
+  .then(([rows, fields]) => {
+    console.log('✅ Database query test successful');
   })
   .catch(err => {
-    console.error('❌ Database connection failed:', err.message);
-    console.error('Host:', host);
-    console.error('Port:', port);
-    console.error('User:', process.env.MYSQL_USER);
-    console.error('Database:', process.env.MYSQL_DATABASE);
+    console.error('❌ Database connection test failed:');
+    console.error('   Error Code:', err.code);
+    console.error('   Error Message:', err.message);
+    console.error('   Error Number:', err.errno);
+    
+    // Common error codes and solutions
+    if (err.code === 'ECONNREFUSED') {
+      console.error('   🔍 Solution: Check if MySQL host and port are correct');
+    } else if (err.code === 'ER_ACCESS_DENIED_ERROR') {
+      console.error('   🔍 Solution: Check username and password');
+    } else if (err.code === 'ENOTFOUND') {
+      console.error('   🔍 Solution: Check if hostname is correct');
+    } else if (err.code === 'ETIMEDOUT') {
+      console.error('   🔍 Solution: Check firewall rules and network access');
+    }
+  })
+  .finally(() => {
+    // Don't close pool here, keep it open for requests
   });
 
+// Export pool for use in other modules
 module.exports = pool;
