@@ -1,19 +1,9 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "dashboard.html",
-      "use": "@vercel/static"
-    }
-  ],
   "routes": [
     {
       "src": "/",
       "dest": "/dashboard.html"
-    },
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
     }
   ],
   "crons": [
