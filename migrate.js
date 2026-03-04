@@ -6,6 +6,10 @@ async function migrate() {
 
   const migrations = [
     {
+      name: 'Purge: delete scan_results older than 7 days (one-time bulk cleanup)',
+      sql: `DELETE FROM scan_results WHERE scan_date < DATE_SUB(NOW(), INTERVAL 7 DAY)`
+    },
+    {
       name: 'Index: scan_results(domain_id, id) — fast latest-scan-per-domain lookup',
       sql: `ALTER TABLE scan_results ADD INDEX IF NOT EXISTS idx_domain_id (domain_id, id DESC)`
     },
@@ -25,8 +29,9 @@ async function migrate() {
 
   for (const m of migrations) {
     try {
-      await db.execute(m.sql);
-      console.log(`✅ ${m.name}`);
+      const [result] = await db.execute(m.sql);
+      const extra = result.affectedRows > 0 ? ` (${result.affectedRows} rows affected)` : '';
+      console.log(`✅ ${m.name}${extra}`);
     } catch (err) {
       // IF NOT EXISTS / IF EXISTS not supported in older MySQL — handle gracefully
       if (err.code === 'ER_DUP_KEYNAME' || err.code === 'ER_CANT_DROP_FIELD_OR_KEY') {

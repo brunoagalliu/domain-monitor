@@ -88,12 +88,13 @@ class DomainMonitor {
       let safeCount = 0;
       let flaggedCount = 0;
       let newlyFlaggedDomains = [];
+      let newlyClearedDomains = [];
 
       // Save results for each domain
       for (const domain of domains) {
         const result = results[domain.domain];
-        
-        // Check if this is a NEW flag (was safe before, now flagged)
+
+        // Check previous scan status for transition detection
         const [previousScan] = await db.execute(
           `SELECT is_safe FROM scan_results
            WHERE domain_id = ?
@@ -102,16 +103,24 @@ class DomainMonitor {
           [domain.id]
         );
 
-        const wasPreviouslySafe = previousScan.length === 0 || previousScan[0].is_safe === 1;
-        const isNowFlagged = !result.is_safe;
+        const hadPreviousScan = previousScan.length > 0;
+        const wasPreviouslySafe = !hadPreviousScan || previousScan[0].is_safe === 1;
+        const wasPreviouslyFlagged = hadPreviousScan && previousScan[0].is_safe === 0;
 
         if (result.is_safe) {
           safeCount++;
+          // Track domains that were flagged and are now cleared
+          if (wasPreviouslyFlagged) {
+            newlyClearedDomains.push({
+              domain: domain.domain,
+              category: domain.category_name,
+              scanDate: new Date()
+            });
+          }
         } else {
           flaggedCount++;
-          
-          // Track newly flagged domains
-          if (wasPreviouslySafe && isNowFlagged) {
+          // Track newly flagged domains (was safe, now flagged)
+          if (wasPreviouslySafe) {
             newlyFlaggedDomains.push({
               domain: domain.domain,
               category: domain.category_name,
@@ -159,7 +168,17 @@ class DomainMonitor {
           console.log('✅ Telegram notification sent');
         } catch (error) {
           console.error('⚠️ Telegram notification failed:', error.message);
-          // Don't throw - continue even if notification fails
+        }
+      }
+
+      // Send Telegram notification for cleared domains
+      if (newlyClearedDomains.length > 0) {
+        console.log(`📱 Sending Telegram alert for ${newlyClearedDomains.length} cleared domain(s)...`);
+        try {
+          await this.telegram.notifyClearedDomains(newlyClearedDomains);
+          console.log('✅ Telegram cleared notification sent');
+        } catch (error) {
+          console.error('⚠️ Telegram notification failed:', error.message);
         }
       }
 
@@ -173,11 +192,12 @@ class DomainMonitor {
 
       console.log(`✨ Scan completed at ${new Date().toLocaleTimeString()}\n`);
       
-      return { 
-        scanned: domains.length, 
-        safe: safeCount, 
+      return {
+        scanned: domains.length,
+        safe: safeCount,
         flagged: flaggedCount,
-        newFlags: newlyFlaggedDomains.length
+        newFlags: newlyFlaggedDomains.length,
+        cleared: newlyClearedDomains.length
       };
     } catch (error) {
       console.error('❌ Scan error:', error.message);

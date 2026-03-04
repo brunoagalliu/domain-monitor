@@ -83,6 +83,33 @@ class TelegramNotifier {
   }
 
   /**
+   * Format and send cleared domain alert
+   */
+  async notifyClearedDomains(clearedDomains) {
+    if (!clearedDomains || clearedDomains.length === 0) return null;
+
+    const count = clearedDomains.length;
+    const plural = count === 1 ? 'domain is' : 'domains are';
+
+    let message = `✅ <b>DOMAIN${count > 1 ? 'S' : ''} CLEARED</b>\n\n`;
+    message += `<b>${count} ${plural} no longer flagged by Google Safe Browsing</b>\n\n`;
+
+    clearedDomains.forEach((domain, index) => {
+      message += `${index + 1}. <b>${domain.domain}</b>\n`;
+      if (domain.category) {
+        message += `   📁 Category: ${domain.category}\n`;
+      }
+      const date = new Date(domain.scanDate).toLocaleString();
+      message += `   🕐 Cleared: ${date}\n\n`;
+    });
+
+    message += `🔗 <a href="${process.env.DASHBOARD_URL || 'https://your-domain.vercel.app'}">View Dashboard</a>`;
+    message += `\n\n<i>Automated alert from Domain Safety Monitor</i>`;
+
+    return await this.sendMessage(message);
+  }
+
+  /**
    * Send scan summary
    */
   async sendScanSummary(summary) {
