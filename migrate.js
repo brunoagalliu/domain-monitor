@@ -1,0 +1,48 @@
+const db = require('./db');
+require('dotenv').config();
+
+async function migrate() {
+  console.log('🚀 Running database migrations...\n');
+
+  const migrations = [
+    {
+      name: 'Index: scan_results(domain_id, id) — fast latest-scan-per-domain lookup',
+      sql: `ALTER TABLE scan_results ADD INDEX IF NOT EXISTS idx_domain_id (domain_id, id DESC)`
+    },
+    {
+      name: 'Index: scan_results(scan_date) — fast recent scans list',
+      sql: `ALTER TABLE scan_results ADD INDEX IF NOT EXISTS idx_scan_date (scan_date DESC)`
+    },
+    {
+      name: 'Index: domains(is_active) — fast active domain filter',
+      sql: `ALTER TABLE domains ADD INDEX IF NOT EXISTS idx_is_active (is_active)`
+    },
+    {
+      name: 'Drop column: scan_results.raw_response — redundant data',
+      sql: `ALTER TABLE scan_results DROP COLUMN IF EXISTS raw_response`
+    }
+  ];
+
+  for (const m of migrations) {
+    try {
+      await db.execute(m.sql);
+      console.log(`✅ ${m.name}`);
+    } catch (err) {
+      // IF NOT EXISTS / IF EXISTS not supported in older MySQL — handle gracefully
+      if (err.code === 'ER_DUP_KEYNAME' || err.code === 'ER_CANT_DROP_FIELD_OR_KEY') {
+        console.log(`⏭️  Already applied: ${m.name}`);
+      } else {
+        console.error(`❌ Failed: ${m.name}`);
+        console.error(`   ${err.message}`);
+      }
+    }
+  }
+
+  console.log('\n✨ Migration complete.');
+  process.exit(0);
+}
+
+migrate().catch(err => {
+  console.error('Migration failed:', err.message);
+  process.exit(1);
+});

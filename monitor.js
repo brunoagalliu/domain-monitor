@@ -95,9 +95,9 @@ class DomainMonitor {
         
         // Check if this is a NEW flag (was safe before, now flagged)
         const [previousScan] = await db.execute(
-          `SELECT is_safe FROM scan_results 
-           WHERE domain_id = ? 
-           ORDER BY scan_date DESC 
+          `SELECT is_safe FROM scan_results
+           WHERE domain_id = ?
+           ORDER BY id DESC
            LIMIT 1`,
           [domain.id]
         );
@@ -123,16 +123,15 @@ class DomainMonitor {
         
         // Save scan result to database
         await db.execute(
-          `INSERT INTO scan_results 
-           (domain_id, is_safe, threat_types, platform_types, threat_entry_types, raw_response) 
-           VALUES (?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO scan_results
+           (domain_id, is_safe, threat_types, platform_types, threat_entry_types)
+           VALUES (?, ?, ?, ?, ?)`,
           [
             domain.id,
             result.is_safe,
             JSON.stringify(result.threats.map(t => t.threatType || null).filter(Boolean)),
             JSON.stringify(result.threats.map(t => t.platformType || null).filter(Boolean)),
-            JSON.stringify(result.threats.map(t => t.threatEntryType || null).filter(Boolean)),
-            JSON.stringify(result)
+            JSON.stringify(result.threats.map(t => t.threatEntryType || null).filter(Boolean))
           ]
         );
 
@@ -162,6 +161,14 @@ class DomainMonitor {
           console.error('⚠️ Telegram notification failed:', error.message);
           // Don't throw - continue even if notification fails
         }
+      }
+
+      // Prune scan results older than 7 days
+      const [pruneResult] = await db.execute(
+        `DELETE FROM scan_results WHERE scan_date < DATE_SUB(NOW(), INTERVAL 7 DAY)`
+      );
+      if (pruneResult.affectedRows > 0) {
+        console.log(`🗑️ Pruned ${pruneResult.affectedRows} old scan record(s)`);
       }
 
       console.log(`✨ Scan completed at ${new Date().toLocaleTimeString()}\n`);

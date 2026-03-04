@@ -905,12 +905,12 @@
                 
                 const data = await response.json();
                 
-                const scansResponse = await fetch(`${API_BASE}/scans?limit=100`);
+                const scansResponse = await fetch(`${API_BASE}/scans?limit=1000`);
                 let scans = [];
                 if (scansResponse.ok) {
                     scans = await scansResponse.json();
                 }
-                
+
                 domains = data.map(domain => {
                     const latestScan = scans.find(s => s.domain === domain.domain);
                     return {
@@ -921,7 +921,7 @@
                     };
                 });
 
-                updateStats();
+                await updateStats();
                 
                 // Only update counts if category pills exist
                 if (document.getElementById('categoryPills')) {
@@ -961,16 +961,30 @@
             }
         }
 
-        function updateStats() {
+        async function updateStats() {
+            try {
+                const res = await fetch(`${API_BASE}/stats`, { credentials: 'include' });
+                if (res.ok) {
+                    const stats = await res.json();
+                    const total = stats.total_domains || 0;
+                    const safe = stats.safe_domains || 0;
+                    const flagged = stats.flagged_domains || 0;
+                    const pending = total - safe - flagged;
+                    document.getElementById('totalDomains').textContent = total;
+                    document.getElementById('safeDomains').textContent = safe;
+                    document.getElementById('flaggedDomains').textContent = flagged;
+                    document.getElementById('pendingScans').textContent = Math.max(0, pending);
+                    return;
+                }
+            } catch {}
+            // Fallback to client-side count
             const total = domains.filter(d => d.is_active).length;
             const safe = domains.filter(d => d.is_active && d.status === 'safe').length;
             const flagged = domains.filter(d => d.is_active && d.status === 'flagged').length;
-            const pending = domains.filter(d => d.is_active && d.status === 'unknown').length;
-
             document.getElementById('totalDomains').textContent = total;
             document.getElementById('safeDomains').textContent = safe;
             document.getElementById('flaggedDomains').textContent = flagged;
-            document.getElementById('pendingScans').textContent = pending;
+            document.getElementById('pendingScans').textContent = total - safe - flagged;
         }
 
         function renderDomains() {
