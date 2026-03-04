@@ -686,10 +686,18 @@
     </style>
 </head>
 <body>
+    <script>
+        fetch('/api/auth/verify', { credentials: 'include' })
+            .then(r => { if (!r.ok) window.location.href = '/login.html'; });
+    </script>
     <div class="container">
-        <div class="header">
+        <div class="header" style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <div>
             <h1>🛡️ Domain Safety Monitor</h1>
             <p>Monitor your domains for Google Safe Browsing flags in real-time</p>
+        </div>
+        <button onclick="logout()" style="padding:8px 18px;background:transparent;border:2px solid #e2e8f0;border-radius:8px;color:#718096;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;margin-top:4px;">Sign out</button>
+        </div>
         </div>
         
 
@@ -1218,6 +1226,10 @@
             setTimeout(() => {
                 alertBox.style.display = 'none';
             }, 5000);
+        }
+        async function logout() {
+            await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+            window.location.href = '/login.html';
         }
     </script>
 </body>

@@ -1,4 +1,5 @@
 const db = require('../../db');
+const { requireAuth } = require('../../lib/auth');
 
 module.exports = async (req, res) => {
   // Enable CORS
@@ -10,6 +11,8 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
+
+  if (!requireAuth(req, res)) return;
 
   const { id } = req.query;
 

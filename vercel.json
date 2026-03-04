@@ -4,6 +4,10 @@
     {
       "src": "/",
       "dest": "/dashboard.html"
+    },
+    {
+      "src": "/login",
+      "dest": "/login.html"
     }
   ],
   "crons": [
