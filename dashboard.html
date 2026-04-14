@@ -718,6 +718,21 @@
             </div>
         </div>
 
+        <!-- Flagged Domains Alert -->
+        <div id="flaggedAlert" class="flagged-alert">
+            <div class="flagged-alert-header">
+                <div class="flagged-alert-icon">🚨</div>
+                <div class="flagged-alert-title">
+                    <h2 id="flaggedAlertTitle">Flagged Domains</h2>
+                    <p id="flaggedAlertSubtitle"></p>
+                </div>
+            </div>
+            <div class="flagged-domains-list" id="flaggedDomainsList"></div>
+            <div class="flagged-alert-actions">
+                <button class="btn-rescan" onclick="scanAllDomains()">🔍 Re-scan Now</button>
+            </div>
+        </div>
+
         <div class="main-card">
             <div class="alert alert-success" id="alertBox"></div>
             
@@ -765,7 +780,7 @@
                 </div>
                 <div class="auto-scan-indicator active">
                     <div class="pulse-dot"></div>
-                    <span>Auto-scan: Every 10 minutes</span>
+                    <span>Auto-scan: Every minute</span>
                 </div>
             </div>
 
@@ -928,11 +943,54 @@
                     updateCategoryCounts();
                 }
                 
+                renderFlaggedAlert();
                 renderDomains();
             } catch (error) {
                 console.error('Error loading domains:', error);
                 showAlert(`Error: ${error.message}`, 'error');
             }
+        }
+
+        function renderFlaggedAlert() {
+            const flaggedDomains = domains.filter(d => d.is_active && d.status === 'flagged');
+            const alertEl = document.getElementById('flaggedAlert');
+            const listEl = document.getElementById('flaggedDomainsList');
+            const titleEl = document.getElementById('flaggedAlertTitle');
+            const subtitleEl = document.getElementById('flaggedAlertSubtitle');
+
+            if (flaggedDomains.length === 0) {
+                alertEl.classList.remove('show');
+                return;
+            }
+
+            titleEl.textContent = `${flaggedDomains.length} Flagged Domain${flaggedDomains.length > 1 ? 's' : ''} Detected`;
+            subtitleEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+
+            listEl.innerHTML = flaggedDomains.map(domain => {
+                let threatBadges = '';
+                if (domain.threats && domain.threats !== 'null' && domain.threats !== '[]') {
+                    try {
+                        const threats = JSON.parse(domain.threats);
+                        if (threats && threats.length > 0) {
+                            threatBadges = `<div class="flagged-domain-threats">${threats.map(t => `<span class="threat-badge">${t}</span>`).join('')}</div>`;
+                        }
+                    } catch {}
+                }
+                const categoryLabel = domain.category_name
+                    ? `<span style="font-size:12px;color:#9b2c2c;">📁 ${domain.category_name}</span>`
+                    : '';
+                return `
+                    <div class="flagged-domain-card">
+                        <div class="flagged-domain-info">
+                            <div class="flagged-domain-name">${domain.domain}</div>
+                            ${categoryLabel}
+                            ${threatBadges}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            alertEl.classList.add('show');
         }
 
         function updateCategoryCounts() {
