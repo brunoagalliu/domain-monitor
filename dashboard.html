@@ -82,12 +82,12 @@
 
         /* Flagged Domains Alert Section */
         .flagged-alert {
-            background: linear-gradient(135deg, #fed7d7 0%, #feb2b2 100%);
-            border: 2px solid #fc8181;
+            background: white;
+            border: 1px solid #feb2b2;
             border-radius: 16px;
             padding: 25px 30px;
             margin-bottom: 30px;
-            box-shadow: 0 4px 20px rgba(245, 101, 101, 0.2);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
             display: none; /* Hidden by default */
         }
 
@@ -135,13 +135,13 @@
         }
 
         .flagged-alert-title h2 {
-            color: #742a2a;
+            color: #2d3748;
             font-size: 24px;
             margin-bottom: 5px;
         }
 
         .flagged-alert-title p {
-            color: #9b2c2c;
+            color: #718096;
             font-size: 14px;
         }
 
@@ -218,7 +218,7 @@
         .flagged-alert-actions {
             margin-top: 20px;
             padding-top: 20px;
-            border-top: 1px solid #feb2b2;
+            border-top: 1px solid #e2e8f0;
             display: flex;
             gap: 10px;
             justify-content: flex-end;
@@ -977,7 +977,7 @@
                     } catch {}
                 }
                 const categoryLabel = domain.category_name
-                    ? `<span style="font-size:12px;color:#9b2c2c;">📁 ${domain.category_name}</span>`
+                    ? `<span style="font-size:12px;color:#718096;">📁 ${domain.category_name}</span>`
                     : '';
                 return `
                     <div class="flagged-domain-card">
