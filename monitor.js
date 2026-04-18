@@ -104,10 +104,12 @@ class DomainMonitor {
         );
 
         const hadPreviousScan = recentScans.length > 0;
-        const wasPreviouslySafe = !hadPreviousScan || recentScans[0].is_safe === 1;
         const wasPreviouslyFlagged = hadPreviousScan && recentScans[0].is_safe === 0;
 
-        // Cleared only fires after 3 consecutive safe scans to avoid flapping spam
+        // Flagged fires only from a confirmed safe baseline (all last 3 safe, or no prior scans)
+        const isConfirmedSafe = !hadPreviousScan || recentScans.every(s => s.is_safe === 1);
+
+        // Cleared fires only after 3 consecutive safe scans
         const isConfirmedCleared = recentScans.length >= 3 && recentScans.every(s => s.is_safe === 1);
 
         if (result.is_safe) {
@@ -121,8 +123,7 @@ class DomainMonitor {
           }
         } else {
           flaggedCount++;
-          // Notify immediately every time a domain goes from safe to flagged
-          if (wasPreviouslySafe) {
+          if (isConfirmedSafe) {
             newlyFlaggedDomains.push({
               domain: domain.domain,
               category: domain.category_name,
