@@ -94,23 +94,25 @@ class DomainMonitor {
       for (const domain of domains) {
         const result = results[domain.domain];
 
-        // Check previous scan status for transition detection
-        const [previousScan] = await db.execute(
+        // Fetch last 3 scan results for cleared confirmation
+        const [recentScans] = await db.execute(
           `SELECT is_safe FROM scan_results
            WHERE domain_id = ?
            ORDER BY id DESC
-           LIMIT 1`,
+           LIMIT 3`,
           [domain.id]
         );
 
-        const hadPreviousScan = previousScan.length > 0;
-        const wasPreviouslySafe = !hadPreviousScan || previousScan[0].is_safe === 1;
-        const wasPreviouslyFlagged = hadPreviousScan && previousScan[0].is_safe === 0;
+        const hadPreviousScan = recentScans.length > 0;
+        const wasPreviouslySafe = !hadPreviousScan || recentScans[0].is_safe === 1;
+        const wasPreviouslyFlagged = hadPreviousScan && recentScans[0].is_safe === 0;
+
+        // Cleared only fires after 3 consecutive safe scans to avoid flapping spam
+        const isConfirmedCleared = recentScans.length >= 3 && recentScans.every(s => s.is_safe === 1);
 
         if (result.is_safe) {
           safeCount++;
-          // Track domains that were flagged and are now cleared
-          if (wasPreviouslyFlagged) {
+          if (wasPreviouslyFlagged && isConfirmedCleared) {
             newlyClearedDomains.push({
               domain: domain.domain,
               category: domain.category_name,
@@ -119,7 +121,7 @@ class DomainMonitor {
           }
         } else {
           flaggedCount++;
-          // Track newly flagged domains (was safe, now flagged)
+          // Notify immediately every time a domain goes from safe to flagged
           if (wasPreviouslySafe) {
             newlyFlaggedDomains.push({
               domain: domain.domain,
