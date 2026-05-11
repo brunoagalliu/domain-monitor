@@ -94,7 +94,7 @@ class DomainMonitor {
       for (const domain of domains) {
         const result = results[domain.domain];
 
-        // Fetch last 3 scan results for cleared confirmation
+        // Fetch last 3 scan results to confirm cleared
         const [recentScans] = await db.execute(
           `SELECT is_safe FROM scan_results
            WHERE domain_id = ?
@@ -103,18 +103,13 @@ class DomainMonitor {
           [domain.id]
         );
 
-        const hadPreviousScan = recentScans.length > 0;
-        const wasPreviouslyFlagged = hadPreviousScan && recentScans[0].is_safe === 0;
-
-        // Flagged fires only from a confirmed safe baseline (all last 3 safe, or no prior scans)
-        const isConfirmedSafe = !hadPreviousScan || recentScans.every(s => s.is_safe === 1);
-
-        // Cleared fires only after 3 consecutive safe scans
         const isConfirmedCleared = recentScans.length >= 3 && recentScans.every(s => s.is_safe === 1);
 
         if (result.is_safe) {
           safeCount++;
-          if (wasPreviouslyFlagged && isConfirmedCleared) {
+          // Only clear if domain is persistently flagged and 3 consecutive safe scans confirm it
+          if (domain.is_flagged && isConfirmedCleared) {
+            await db.execute(`UPDATE domains SET is_flagged = 0 WHERE id = ?`, [domain.id]);
             newlyClearedDomains.push({
               domain: domain.domain,
               category: domain.category_name,
@@ -123,7 +118,9 @@ class DomainMonitor {
           }
         } else {
           flaggedCount++;
-          if (isConfirmedSafe) {
+          // Only notify and mark flagged once — stays flagged until confirmed cleared
+          if (!domain.is_flagged) {
+            await db.execute(`UPDATE domains SET is_flagged = 1 WHERE id = ?`, [domain.id]);
             newlyFlaggedDomains.push({
               domain: domain.domain,
               category: domain.category_name,

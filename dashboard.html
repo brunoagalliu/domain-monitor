@@ -928,9 +928,15 @@
 
                 domains = data.map(domain => {
                     const latestScan = scans.find(s => s.domain === domain.domain);
+                    let status = 'unknown';
+                    if (domain.is_flagged) {
+                        status = 'flagged';
+                    } else if (latestScan) {
+                        status = latestScan.is_safe ? 'safe' : 'flagged';
+                    }
                     return {
                         ...domain,
-                        status: latestScan ? (latestScan.is_safe ? 'safe' : 'flagged') : 'unknown',
+                        status,
                         lastScan: latestScan ? latestScan.scan_date : null,
                         threats: latestScan ? latestScan.threat_types : null
                     };

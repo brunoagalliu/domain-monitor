@@ -24,6 +24,10 @@ async function migrate() {
     {
       name: 'Drop column: scan_results.raw_response — redundant data',
       sql: `ALTER TABLE scan_results DROP COLUMN IF EXISTS raw_response`
+    },
+    {
+      name: 'Add column: domains.is_flagged — persistent flagged state',
+      sql: `ALTER TABLE domains ADD COLUMN IF NOT EXISTS is_flagged TINYINT(1) NOT NULL DEFAULT 0`
     }
   ];
 
