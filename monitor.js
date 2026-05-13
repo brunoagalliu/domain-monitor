@@ -94,16 +94,16 @@ class DomainMonitor {
       for (const domain of domains) {
         const result = results[domain.domain];
 
-        // Fetch last 3 scan results to confirm cleared
+        // Fetch last 10 scan results to confirm cleared
         const [recentScans] = await db.execute(
           `SELECT is_safe FROM scan_results
            WHERE domain_id = ?
            ORDER BY id DESC
-           LIMIT 3`,
+           LIMIT 10`,
           [domain.id]
         );
 
-        const isConfirmedCleared = recentScans.length >= 3 && recentScans.every(s => s.is_safe === 1);
+        const isConfirmedCleared = recentScans.length >= 10 && recentScans.every(s => s.is_safe === 1);
 
         if (result.is_safe) {
           safeCount++;
