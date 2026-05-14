@@ -100,4 +100,19 @@ pool.getConnection()
     }
   });
 
+// Wrap execute to retry once on stale connection errors (common in serverless)
+const RETRYABLE = new Set(['ECONNRESET', 'ECONNREFUSED', 'PROTOCOL_CONNECTION_LOST', 'ETIMEDOUT']);
+
+const _execute = pool.execute.bind(pool);
+pool.execute = async function (...args) {
+  try {
+    return await _execute(...args);
+  } catch (err) {
+    if (RETRYABLE.has(err.code)) {
+      return await _execute(...args);
+    }
+    throw err;
+  }
+};
+
 module.exports = pool;
