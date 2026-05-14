@@ -76,10 +76,19 @@
         .flagged-collapse-icon.collapsed { transform: rotate(-90deg); }
 
         /* Category grouping */
-        .category-section { margin-bottom: 24px; }
-        .category-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0; }
+        .category-section { margin-bottom: 20px; }
+        .category-header {
+            display: flex; align-items: center; gap: 10px;
+            margin-bottom: 12px; padding: 8px 10px; margin-left: -10px; margin-right: -10px;
+            border-bottom: 2px solid #e2e8f0;
+            cursor: pointer; border-radius: 8px;
+            transition: background 0.15s;
+        }
+        .category-header:hover { background: #f7fafc; }
         .category-badge { padding: 6px 14px; border-radius: 20px; font-size: 14px; font-weight: 600; color: white; display: inline-flex; align-items: center; gap: 8px; }
         .category-count { background: rgba(255,255,255,0.3); padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+        .category-chevron { margin-left: auto; font-size: 13px; color: #a0aec0; transition: transform 0.2s; flex-shrink: 0; }
+        .category-chevron.collapsed { transform: rotate(-90deg); }
         .flagged-alert-icon { font-size: 28px; animation: pulse-warning 2s infinite; }
 
         @keyframes pulse-warning {
@@ -487,7 +496,11 @@
                     <h2 class="section-title">Monitored Domains</h2>
                     <span class="domain-count-info" id="domainCountInfo"></span>
                 </div>
-                <button class="btn btn-scan" style="font-size:13px;padding:8px 16px;" onclick="scanAllDomains()" id="scanBtn2">🔍 Scan All</button>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <button class="btn btn-secondary" style="font-size:12px;padding:6px 12px;" onclick="expandAll()">Expand All</button>
+                    <button class="btn btn-secondary" style="font-size:12px;padding:6px 12px;" onclick="collapseAll()">Collapse All</button>
+                    <button class="btn btn-scan" style="font-size:13px;padding:8px 16px;" onclick="scanAllDomains()" id="scanBtn2">🔍 Scan All</button>
+                </div>
             </div>
 
             <!-- Bulk action bar -->
@@ -520,6 +533,7 @@
         let addMode = 'single';
         let visibleDomainIds = [];
         let flaggedAlertCollapsed = localStorage.getItem('flaggedAlertCollapsed') === 'true';
+        let collapsedCategories = new Set(JSON.parse(localStorage.getItem('collapsedCategories') || '[]'));
 
         document.addEventListener('DOMContentLoaded', () => {
             loadCategories().then(() => loadDomains());
@@ -707,6 +721,29 @@
             return list;
         }
 
+        // ── Category collapse ─────────────────────────────────────────
+
+        function toggleCategory(catId) {
+            const key = String(catId);
+            if (collapsedCategories.has(key)) collapsedCategories.delete(key);
+            else collapsedCategories.add(key);
+            localStorage.setItem('collapsedCategories', JSON.stringify([...collapsedCategories]));
+            renderDomains();
+        }
+
+        function collapseAll() {
+            categories.forEach(c => collapsedCategories.add(String(c.id)));
+            collapsedCategories.add('uncategorized');
+            localStorage.setItem('collapsedCategories', JSON.stringify([...collapsedCategories]));
+            renderDomains();
+        }
+
+        function expandAll() {
+            collapsedCategories.clear();
+            localStorage.setItem('collapsedCategories', '[]');
+            renderDomains();
+        }
+
         // ── Render domains ────────────────────────────────────────────
 
         function renderDomains() {
@@ -750,28 +787,32 @@
                 .forEach(({ cat, items }) => {
                     const nFlagged = items.filter(d => d.status === 'flagged').length;
                     const nSafe = items.filter(d => d.status === 'safe').length;
+                    const collapsed = collapsedCategories.has(String(cat.id));
                     html += `
                         <div class="category-section">
-                            <div class="category-header">
+                            <div class="category-header" onclick="toggleCategory(${cat.id})">
                                 <div class="category-badge" style="background:${cat.color}">
                                     ${cat.name}<span class="category-count">${items.length}</span>
                                 </div>
                                 ${nFlagged ? `<span style="color:#f56565;font-size:13px;">⚠️ ${nFlagged} flagged</span>` : ''}
                                 ${nSafe ? `<span style="color:#48bb78;font-size:13px;">✓ ${nSafe} safe</span>` : ''}
+                                <span class="category-chevron ${collapsed ? 'collapsed' : ''}">▼</span>
                             </div>
-                            <div class="domains-list">${items.map(renderDomainItem).join('')}</div>
+                            ${collapsed ? '' : `<div class="domains-list">${items.map(renderDomainItem).join('')}</div>`}
                         </div>`;
                 });
 
             if (uncategorized.length) {
+                const collapsed = collapsedCategories.has('uncategorized');
                 html += `
                     <div class="category-section">
-                        <div class="category-header">
+                        <div class="category-header" onclick="toggleCategory('uncategorized')">
                             <div class="category-badge" style="background:#a0aec0">
                                 Uncategorized<span class="category-count">${uncategorized.length}</span>
                             </div>
+                            <span class="category-chevron ${collapsed ? 'collapsed' : ''}">▼</span>
                         </div>
-                        <div class="domains-list">${uncategorized.map(renderDomainItem).join('')}</div>
+                        ${collapsed ? '' : `<div class="domains-list">${uncategorized.map(renderDomainItem).join('')}</div>`}
                     </div>`;
             }
 
