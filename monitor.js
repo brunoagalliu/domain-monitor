@@ -245,20 +245,16 @@ class DomainMonitor {
   async getDomainStats() {
     try {
       const [stats] = await db.execute(`
-        SELECT 
-          COUNT(DISTINCT d.id) as total_domains,
-          COUNT(DISTINCT CASE WHEN sr.is_safe = true THEN d.id END) as safe_domains,
-          COUNT(DISTINCT CASE WHEN sr.is_safe = false THEN d.id END) as flagged_domains
+        SELECT
+          COUNT(DISTINCT d.id)::int AS total_domains,
+          COUNT(DISTINCT CASE WHEN sr.is_safe = true THEN d.id END)::int AS safe_domains,
+          COUNT(DISTINCT CASE WHEN d.is_flagged = true THEN d.id END)::int AS flagged_domains,
+          COUNT(DISTINCT CASE WHEN d.is_suspicious = true AND d.is_flagged = false THEN d.id END)::int AS suspicious_domains
         FROM domains d
-        LEFT JOIN scan_results sr ON d.id = sr.domain_id 
-          AND sr.id = (
-            SELECT MAX(sr2.id) 
-            FROM scan_results sr2 
-            WHERE sr2.domain_id = d.id
-          )
+        LEFT JOIN scan_results sr ON d.id = sr.domain_id
+          AND sr.id = (SELECT MAX(sr2.id) FROM scan_results sr2 WHERE sr2.domain_id = d.id)
         WHERE d.is_active = true
       `);
-      
       return stats[0];
     } catch (error) {
       console.error('Error fetching stats:', error);
