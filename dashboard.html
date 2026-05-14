@@ -70,7 +70,16 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        .flagged-alert-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+        .flagged-alert-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; cursor: pointer; user-select: none; }
+        .flagged-alert-header:hover .flagged-collapse-icon { color: #4a5568; }
+        .flagged-collapse-icon { margin-left: auto; font-size: 16px; color: #718096; transition: transform 0.2s; }
+        .flagged-collapse-icon.collapsed { transform: rotate(-90deg); }
+
+        /* Category grouping */
+        .category-section { margin-bottom: 24px; }
+        .category-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0; }
+        .category-badge { padding: 6px 14px; border-radius: 20px; font-size: 14px; font-weight: 600; color: white; display: inline-flex; align-items: center; gap: 8px; }
+        .category-count { background: rgba(255,255,255,0.3); padding: 2px 8px; border-radius: 12px; font-size: 12px; }
         .flagged-alert-icon { font-size: 28px; animation: pulse-warning 2s infinite; }
 
         @keyframes pulse-warning {
@@ -380,16 +389,19 @@
 
         <!-- Flagged Alert -->
         <div id="flaggedAlert" class="flagged-alert">
-            <div class="flagged-alert-header">
+            <div class="flagged-alert-header" onclick="toggleFlaggedAlert()">
                 <div class="flagged-alert-icon">🚨</div>
                 <div class="flagged-alert-title">
                     <h2 id="flaggedAlertTitle">Flagged Domains</h2>
                     <p id="flaggedAlertSubtitle"></p>
                 </div>
+                <span class="flagged-collapse-icon" id="flaggedCollapseIcon">▼</span>
             </div>
-            <div class="flagged-domains-list" id="flaggedDomainsList"></div>
-            <div class="flagged-alert-footer">
-                <button class="btn btn-outline-danger" onclick="scanAllDomains()">🔍 Re-scan Now</button>
+            <div id="flaggedAlertBody">
+                <div class="flagged-domains-list" id="flaggedDomainsList"></div>
+                <div class="flagged-alert-footer">
+                    <button class="btn btn-outline-danger" onclick="event.stopPropagation();scanAllDomains()">🔍 Re-scan Now</button>
+                </div>
             </div>
         </div>
 
@@ -507,6 +519,7 @@
         let selectedIds = new Set();
         let addMode = 'single';
         let visibleDomainIds = [];
+        let flaggedAlertCollapsed = localStorage.getItem('flaggedAlertCollapsed') === 'true';
 
         document.addEventListener('DOMContentLoaded', () => {
             loadCategories().then(() => loadDomains());
@@ -593,14 +606,16 @@
         // ── Flagged alert ─────────────────────────────────────────────
 
         function renderFlaggedAlert() {
-            const flagged = domains.filter(d => d.is_active && d.is_flagged);
+            const flagged = domains
+                .filter(d => d.is_active && d.is_flagged)
+                .sort((a, b) => (b.lastScan || '').localeCompare(a.lastScan || ''));
             const alertEl = document.getElementById('flaggedAlert');
             if (!flagged.length) { alertEl.classList.remove('show'); return; }
 
             document.getElementById('flaggedAlertTitle').textContent =
                 `${flagged.length} Flagged Domain${flagged.length > 1 ? 's' : ''} Detected`;
             document.getElementById('flaggedAlertSubtitle').textContent =
-                `Last updated: ${new Date().toLocaleTimeString()}`;
+                `Last updated: ${new Date().toLocaleTimeString()} — click to collapse`;
 
             document.getElementById('flaggedDomainsList').innerHTML = flagged.map(d => {
                 let badges = '';
@@ -608,16 +623,34 @@
                     const t = JSON.parse(d.threats);
                     if (t?.length) badges = `<div class="flagged-domain-threats">${t.map(x => `<span class="threat-badge">${x}</span>`).join('')}</div>`;
                 } catch {}
-                const cat = d.category_name ? `<span style="font-size:11px;color:#718096;">📁 ${d.category_name}</span>` : '';
+                const cat = categories.find(c => c.id === d.category_id);
+                const catLabel = cat ? `<span style="font-size:11px;color:#718096;">📁 ${cat.name}</span>` : '';
+                const scanTime = d.lastScan ? `<span style="font-size:11px;color:#a0aec0;">🕐 ${new Date(d.lastScan).toLocaleString()}</span>` : '';
                 return `<div class="flagged-domain-card">
                     <div>
                         <div class="flagged-domain-name">${d.domain}</div>
-                        ${cat}${badges}
+                        <div style="display:flex;gap:10px;align-items:center;margin-top:4px;flex-wrap:wrap;">${catLabel}${scanTime}</div>
+                        ${badges}
                     </div>
                 </div>`;
             }).join('');
 
             alertEl.classList.add('show');
+            applyFlaggedAlertCollapse();
+        }
+
+        function toggleFlaggedAlert() {
+            flaggedAlertCollapsed = !flaggedAlertCollapsed;
+            localStorage.setItem('flaggedAlertCollapsed', flaggedAlertCollapsed);
+            applyFlaggedAlertCollapse();
+        }
+
+        function applyFlaggedAlertCollapse() {
+            const body = document.getElementById('flaggedAlertBody');
+            const icon = document.getElementById('flaggedCollapseIcon');
+            if (!body || !icon) return;
+            body.style.display = flaggedAlertCollapsed ? 'none' : 'block';
+            icon.classList.toggle('collapsed', flaggedAlertCollapsed);
         }
 
         // ── Category pills ────────────────────────────────────────────
@@ -697,7 +730,52 @@
                 return;
             }
 
-            container.innerHTML = `<div class="domains-list">${list.map(renderDomainItem).join('')}</div>`;
+            // Group by category
+            const groups = {};
+            const uncategorized = [];
+            list.forEach(d => {
+                const cat = categories.find(c => c.id === d.category_id);
+                if (cat) {
+                    if (!groups[cat.id]) groups[cat.id] = { cat, items: [] };
+                    groups[cat.id].items.push(d);
+                } else {
+                    uncategorized.push(d);
+                }
+            });
+
+            let html = '';
+
+            Object.values(groups)
+                .sort((a, b) => a.cat.name.localeCompare(b.cat.name))
+                .forEach(({ cat, items }) => {
+                    const nFlagged = items.filter(d => d.status === 'flagged').length;
+                    const nSafe = items.filter(d => d.status === 'safe').length;
+                    html += `
+                        <div class="category-section">
+                            <div class="category-header">
+                                <div class="category-badge" style="background:${cat.color}">
+                                    ${cat.name}<span class="category-count">${items.length}</span>
+                                </div>
+                                ${nFlagged ? `<span style="color:#f56565;font-size:13px;">⚠️ ${nFlagged} flagged</span>` : ''}
+                                ${nSafe ? `<span style="color:#48bb78;font-size:13px;">✓ ${nSafe} safe</span>` : ''}
+                            </div>
+                            <div class="domains-list">${items.map(renderDomainItem).join('')}</div>
+                        </div>`;
+                });
+
+            if (uncategorized.length) {
+                html += `
+                    <div class="category-section">
+                        <div class="category-header">
+                            <div class="category-badge" style="background:#a0aec0">
+                                Uncategorized<span class="category-count">${uncategorized.length}</span>
+                            </div>
+                        </div>
+                        <div class="domains-list">${uncategorized.map(renderDomainItem).join('')}</div>
+                    </div>`;
+            }
+
+            container.innerHTML = html;
         }
 
         function renderDomainItem(d) {
