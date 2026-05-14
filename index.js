@@ -39,6 +39,17 @@ app.all('/api/categories/:id', (req, res) => {
 });
 app.all('/api/categories', require('./api/categories'));
 
+// One-time migration route (remove after first use)
+app.get('/api/migrate', async (req, res) => {
+  try {
+    const { runMigration } = require('./migrate');
+    await runMigration();
+    res.json({ success: true, message: 'Migration complete' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Cron: scan every minute
 const monitor = new DomainMonitor();
 cron.schedule('* * * * *', async () => {
