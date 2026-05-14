@@ -52,6 +52,21 @@ const migrations = [
   {
     name: 'Index: domains(is_active)',
     sql: `CREATE INDEX IF NOT EXISTS idx_domains_is_active ON domains (is_active)`
+  },
+  {
+    name: 'Add is_suspicious to domains',
+    sql: `ALTER TABLE domains ADD COLUMN IF NOT EXISTS is_suspicious BOOLEAN DEFAULT false`
+  },
+  {
+    name: 'Create threat_lists table',
+    sql: `
+      CREATE TABLE IF NOT EXISTS threat_lists (
+        list_key VARCHAR(100) PRIMARY KEY,
+        state_token TEXT DEFAULT '',
+        prefixes_b64 TEXT DEFAULT '',
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `
   }
 ];
 

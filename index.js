@@ -60,6 +60,15 @@ cron.schedule('* * * * *', async () => {
   }
 });
 
+// Cron: refresh Safe Browsing threat lists every 30 minutes
+cron.schedule('*/30 * * * *', async () => {
+  try {
+    await monitor.updateClient.fetchUpdates();
+  } catch (err) {
+    console.error('Threat list refresh error:', err.message);
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

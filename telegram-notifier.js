@@ -109,6 +109,23 @@ class TelegramNotifier {
     return await this.sendMessage(message);
   }
 
+  async notifySuspiciousDomains(domains) {
+    if (!domains?.length) return null;
+    const count = domains.length;
+    let msg = `⚠️ <b>SUSPICIOUS DOMAIN${count > 1 ? 'S' : ''} DETECTED</b>\n\n`;
+    msg += `<b>${count} domain${count > 1 ? 's' : ''} flagged by Safe Browsing Update API</b>\n`;
+    msg += `<i>(Lookup API hasn't confirmed yet — monitor closely)</i>\n\n`;
+    domains.forEach((d, i) => {
+      msg += `${i + 1}. <b>${d.domain}</b>\n`;
+      if (d.category) msg += `   📁 ${d.category}\n`;
+      if (d.threatType) msg += `   ⚠️ ${d.threatType}\n`;
+      msg += `   🕐 ${new Date(d.scanDate).toLocaleString()}\n\n`;
+    });
+    msg += `🔗 <a href="${process.env.DASHBOARD_URL || ''}">View Dashboard</a>`;
+    msg += `\n\n<i>Automated alert from Domain Safety Monitor</i>`;
+    return await this.sendMessage(msg);
+  }
+
   /**
    * Send scan summary
    */

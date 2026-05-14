@@ -312,8 +312,15 @@
         .status-badge { padding: 4px 10px; border-radius: 16px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
         .badge-safe { background: #c6f6d5; color: #22543d; }
         .badge-flagged { background: #fed7d7; color: #742a2a; }
-        .badge-pending { background: #feebc8; color: #7c2d12; }
+        .badge-suspicious { background: #feebc8; color: #7c2d12; }
+        .badge-pending { background: #e2e8f0; color: #4a5568; }
         .badge-unknown { background: #e2e8f0; color: #4a5568; }
+        .status-suspicious { background: #ed8936; animation: pulse-orange 1.5s infinite; }
+        @keyframes pulse-orange {
+            0% { box-shadow: 0 0 0 0 rgba(237,137,54,0.6); }
+            70% { box-shadow: 0 0 0 8px rgba(237,137,54,0); }
+            100% { box-shadow: 0 0 0 0 rgba(237,137,54,0); }
+        }
 
         .btn-remove { padding: 6px 12px; background: #f56565; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; transition: background 0.2s; flex-shrink: 0; }
         .btn-remove:hover { background: #e53e3e; }
@@ -581,6 +588,7 @@
                     const scan = scans.find(s => s.domain === d.domain);
                     let status = 'unknown';
                     if (d.is_flagged) status = 'flagged';
+                    else if (d.is_suspicious) status = 'suspicious';
                     else if (scan) status = scan.is_safe ? 'safe' : 'flagged';
                     return { ...d, status, lastScan: scan?.scan_date || null, threats: scan?.threat_types || null };
                 });
@@ -623,15 +631,20 @@
             const flagged = domains
                 .filter(d => d.is_active && d.is_flagged)
                 .sort((a, b) => (b.lastScan || '').localeCompare(a.lastScan || ''));
+            const suspicious = domains
+                .filter(d => d.is_active && d.is_suspicious && !d.is_flagged)
+                .sort((a, b) => (b.lastScan || '').localeCompare(a.lastScan || ''));
             const alertEl = document.getElementById('flaggedAlert');
-            if (!flagged.length) { alertEl.classList.remove('show'); return; }
 
+            if (!flagged.length && !suspicious.length) { alertEl.classList.remove('show'); return; }
+
+            const total = flagged.length + suspicious.length;
             document.getElementById('flaggedAlertTitle').textContent =
-                `${flagged.length} Flagged Domain${flagged.length > 1 ? 's' : ''} Detected`;
+                `${total} Domain${total > 1 ? 's' : ''} Need Attention`;
             document.getElementById('flaggedAlertSubtitle').textContent =
                 `Last updated: ${new Date().toLocaleTimeString()} — click to collapse`;
 
-            document.getElementById('flaggedDomainsList').innerHTML = flagged.map(d => {
+            const renderCard = (d, isSuspicious) => {
                 let badges = '';
                 try {
                     const t = JSON.parse(d.threats);
@@ -640,14 +653,25 @@
                 const cat = categories.find(c => c.id === d.category_id);
                 const catLabel = cat ? `<span style="font-size:11px;color:#718096;">📁 ${cat.name}</span>` : '';
                 const scanTime = d.lastScan ? `<span style="font-size:11px;color:#a0aec0;">🕐 ${new Date(d.lastScan).toLocaleString()}</span>` : '';
-                return `<div class="flagged-domain-card">
+                const borderColor = isSuspicious ? '#ed8936' : '#f56565';
+                const label = isSuspicious
+                    ? `<span style="font-size:11px;font-weight:700;color:#7c2d12;background:#feebc8;padding:2px 8px;border-radius:10px;">⚠️ SUSPICIOUS</span>`
+                    : `<span style="font-size:11px;font-weight:700;color:#742a2a;background:#fed7d7;padding:2px 8px;border-radius:10px;">🚨 FLAGGED</span>`;
+                return `<div class="flagged-domain-card" style="border-left-color:${borderColor};">
                     <div>
-                        <div class="flagged-domain-name">${d.domain}</div>
-                        <div style="display:flex;gap:10px;align-items:center;margin-top:4px;flex-wrap:wrap;">${catLabel}${scanTime}</div>
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                            <span class="flagged-domain-name">${d.domain}</span>${label}
+                        </div>
+                        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">${catLabel}${scanTime}</div>
                         ${badges}
                     </div>
                 </div>`;
-            }).join('');
+            };
+
+            document.getElementById('flaggedDomainsList').innerHTML = [
+                ...flagged.map(d => renderCard(d, false)),
+                ...suspicious.map(d => renderCard(d, true))
+            ].join('');
 
             alertEl.classList.add('show');
             applyFlaggedAlertCollapse();
