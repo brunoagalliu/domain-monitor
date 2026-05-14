@@ -1,4 +1,5 @@
-const db = require('./db');
+const { execute: dbExecute } = require('./db');
+const db = { execute: dbExecute };
 const SafeBrowsingChecker = require('./safe-browsing');
 const TelegramNotifier = require('./telegram-notifier');
 require('dotenv').config();
@@ -14,13 +15,15 @@ class DomainMonitor {
       // Clean the domain (remove protocol if present)
       domain = domain.replace(/^https?:\/\//, '').toLowerCase();
       
-      const [result] = await db.execute(
-        'INSERT INTO domains (domain, notes, category_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE notes = ?, is_active = true, category_id = ?',
-        [domain, notes, categoryId, notes, categoryId]
+      const [rows] = await db.execute(
+        `INSERT INTO domains (domain, notes, category_id) VALUES ($1, $2, $3)
+         ON CONFLICT (domain) DO UPDATE SET notes = EXCLUDED.notes, is_active = true, category_id = EXCLUDED.category_id
+         RETURNING id`,
+        [domain, notes, categoryId]
       );
-      
+
       console.log(`✅ Domain added: ${domain}`);
-      return result.insertId;
+      return rows[0].id;
     } catch (error) {
       console.error('Error adding domain:', error);
       throw error;
@@ -41,11 +44,11 @@ class DomainMonitor {
 
   async addCategory(name, color = '#667eea') {
     try {
-      const [result] = await db.execute(
-        'INSERT INTO categories (name, color) VALUES (?, ?)',
+      const [rows] = await db.execute(
+        'INSERT INTO categories (name, color) VALUES ($1, $2) RETURNING id',
         [name, color]
       );
-      return result.insertId;
+      return rows[0].id;
     } catch (error) {
       console.error('Error adding category:', error);
       throw error;
@@ -97,19 +100,18 @@ class DomainMonitor {
         // Fetch last 10 scan results to confirm cleared
         const [recentScans] = await db.execute(
           `SELECT is_safe FROM scan_results
-           WHERE domain_id = ?
+           WHERE domain_id = $1
            ORDER BY id DESC
            LIMIT 10`,
           [domain.id]
         );
 
-        const isConfirmedCleared = recentScans.length >= 10 && recentScans.every(s => s.is_safe === 1);
+        const isConfirmedCleared = recentScans.length >= 10 && recentScans.every(s => s.is_safe === true);
 
         if (result.is_safe) {
           safeCount++;
-          // Only clear if domain is persistently flagged and 3 consecutive safe scans confirm it
           if (domain.is_flagged && isConfirmedCleared) {
-            await db.execute(`UPDATE domains SET is_flagged = 0 WHERE id = ?`, [domain.id]);
+            await db.execute(`UPDATE domains SET is_flagged = false WHERE id = $1`, [domain.id]);
             newlyClearedDomains.push({
               domain: domain.domain,
               category: domain.category_name,
@@ -118,9 +120,8 @@ class DomainMonitor {
           }
         } else {
           flaggedCount++;
-          // Only notify and mark flagged once — stays flagged until confirmed cleared
           if (!domain.is_flagged) {
-            await db.execute(`UPDATE domains SET is_flagged = 1 WHERE id = ?`, [domain.id]);
+            await db.execute(`UPDATE domains SET is_flagged = true WHERE id = $1`, [domain.id]);
             newlyFlaggedDomains.push({
               domain: domain.domain,
               category: domain.category_name,
@@ -129,12 +130,12 @@ class DomainMonitor {
             });
           }
         }
-        
+
         // Save scan result to database
         await db.execute(
           `INSERT INTO scan_results
            (domain_id, is_safe, threat_types, platform_types, threat_entry_types)
-           VALUES (?, ?, ?, ?, ?)`,
+           VALUES ($1, $2, $3, $4, $5)`,
           [
             domain.id,
             result.is_safe,
@@ -183,11 +184,11 @@ class DomainMonitor {
       }
 
       // Prune scan results older than 7 days
-      const [pruneResult] = await db.execute(
-        `DELETE FROM scan_results WHERE scan_date < DATE_SUB(NOW(), INTERVAL 7 DAY)`
+      const [, pruneResult] = await db.execute(
+        `DELETE FROM scan_results WHERE scan_date < NOW() - INTERVAL '7 days'`
       );
-      if (pruneResult.affectedRows > 0) {
-        console.log(`🗑️ Pruned ${pruneResult.affectedRows} old scan record(s)`);
+      if (pruneResult.rowCount > 0) {
+        console.log(`🗑️ Pruned ${pruneResult.rowCount} old scan record(s)`);
       }
 
       console.log(`✨ Scan completed at ${new Date().toLocaleTimeString()}\n`);
@@ -216,7 +217,7 @@ class DomainMonitor {
         FROM scan_results sr
         JOIN domains d ON sr.domain_id = d.id
         ORDER BY sr.scan_date DESC
-        LIMIT ?
+        LIMIT $1
       `, [limit]);
       
       return rows;
@@ -231,8 +232,8 @@ class DomainMonitor {
       const [stats] = await db.execute(`
         SELECT 
           COUNT(DISTINCT d.id) as total_domains,
-          COUNT(DISTINCT CASE WHEN sr.is_safe = 1 THEN d.id END) as safe_domains,
-          COUNT(DISTINCT CASE WHEN sr.is_safe = 0 THEN d.id END) as flagged_domains
+          COUNT(DISTINCT CASE WHEN sr.is_safe = true THEN d.id END) as safe_domains,
+          COUNT(DISTINCT CASE WHEN sr.is_safe = false THEN d.id END) as flagged_domains
         FROM domains d
         LEFT JOIN scan_results sr ON d.id = sr.domain_id 
           AND sr.id = (

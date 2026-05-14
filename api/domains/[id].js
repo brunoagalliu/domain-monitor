@@ -1,4 +1,5 @@
-const db = require('../../db');
+const { execute: dbExecute } = require('../../db');
+const db = { execute: dbExecute };
 const { requireAuth } = require('../../lib/auth');
 
 module.exports = async (req, res) => {
@@ -25,12 +26,12 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: 'Domain ID is required' });
     }
     
-    const [result] = await db.execute(
-      'UPDATE domains SET is_active = false WHERE id = ?', 
+    const [, result] = await db.execute(
+      'UPDATE domains SET is_active = false WHERE id = $1',
       [id]
     );
-    
-    if (result.affectedRows === 0) {
+
+    if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Domain not found' });
     }
     

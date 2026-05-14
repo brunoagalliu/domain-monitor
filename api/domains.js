@@ -1,4 +1,5 @@
-const db = require('../db');
+const { execute: dbExecute } = require('../db');
+const db = { execute: dbExecute };
 const DomainMonitor = require('../monitor');
 const { requireAuth } = require('../lib/auth');
 
@@ -51,7 +52,7 @@ module.exports = async (req, res) => {
     console.error('Error stack:', error.stack);
     
     // Return detailed error for debugging
-    if (error.code === 'ER_DUP_ENTRY') {
+    if (error.code === '23505') {
       return res.status(400).json({ error: 'Domain already exists' });
     }
     
