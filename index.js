@@ -65,9 +65,13 @@ app.get('/api/test-detection', async (req, res) => {
     })(),
     (async () => {
       const t = Date.now();
-      const results = await monitor.browserChecker.checkDomains([domain]);
-      const r = results[0];
-      log.push({ method: 'Browser', elapsed: Date.now() - t, at: ts(), flagged: r.status === 'dangerous', detail: r.status });
+      try {
+        const results = await monitor.browserChecker.checkDomains([domain]);
+        const r = results[0];
+        log.push({ method: 'Browser', elapsed: Date.now() - t, at: ts(), flagged: r.status === 'dangerous', detail: r.status });
+      } catch (e) {
+        log.push({ method: 'Browser', elapsed: Date.now() - t, at: ts(), flagged: false, detail: 'ERROR: ' + e.message });
+      }
     })(),
   ]);
 
