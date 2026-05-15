@@ -62,7 +62,7 @@ app.get('/api/test-detection', async (req, res) => {
       const t = Date.now();
       try {
         const crypto = require('crypto');
-        const { urlExpressions } = require('./lib/safebrowsing-v5');
+        const { urlExpressions } = require('./lib/webrisk');
         const exprs = urlExpressions(domain);
         const prefixMap = {};
         for (const e of exprs) {
@@ -71,9 +71,9 @@ app.get('/api/test-detection', async (req, res) => {
         }
         const results = await monitor.updateClient.checkDomains([domain]);
         const match = results[domain];
-        log.push({ method: 'Update API (v5)', elapsed: Date.now() - t, at: ts(), flagged: !!match, detail: match?.threatType || null, debug: { prefixes: prefixMap } });
+        log.push({ method: 'Web Risk API', elapsed: Date.now() - t, at: ts(), flagged: !!match, detail: match?.threatType || null, debug: { prefixes: prefixMap } });
       } catch (e) {
-        log.push({ method: 'Update API (v5)', elapsed: Date.now() - t, at: ts(), flagged: false, detail: 'ERROR: ' + e.message });
+        log.push({ method: 'Web Risk API', elapsed: Date.now() - t, at: ts(), flagged: false, detail: 'ERROR: ' + e.message });
       }
     })(),
     (async () => {
