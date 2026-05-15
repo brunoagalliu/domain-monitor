@@ -60,6 +60,15 @@ cron.schedule('* * * * *', async () => {
   }
 });
 
+// Cron: browser scan every 2 minutes
+cron.schedule('*/2 * * * *', async () => {
+  try {
+    await monitor.browserScanDomains();
+  } catch (err) {
+    console.error('Browser scan error:', err.message);
+  }
+});
+
 // Cron: refresh Safe Browsing threat lists every 30 minutes
 cron.schedule('*/30 * * * *', async () => {
   try {

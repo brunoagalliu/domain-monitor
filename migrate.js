@@ -66,6 +66,22 @@ const migrations = [
     sql: `CREATE INDEX IF NOT EXISTS idx_domains_is_suspicious ON domains (is_suspicious) WHERE is_active = true`
   },
   {
+    name: 'Add browser_status to domains',
+    sql: `ALTER TABLE domains ADD COLUMN IF NOT EXISTS browser_status VARCHAR(20) DEFAULT NULL`
+  },
+  {
+    name: 'Add browser_redirect_target to domains',
+    sql: `ALTER TABLE domains ADD COLUMN IF NOT EXISTS browser_redirect_target VARCHAR(500) DEFAULT NULL`
+  },
+  {
+    name: 'Add last_browser_check to domains',
+    sql: `ALTER TABLE domains ADD COLUMN IF NOT EXISTS last_browser_check TIMESTAMP DEFAULT NULL`
+  },
+  {
+    name: 'Index: domains(browser_status) partial',
+    sql: `CREATE INDEX IF NOT EXISTS idx_domains_browser_status ON domains (browser_status) WHERE is_active = true AND browser_status IS NOT NULL`
+  },
+  {
     name: 'Create threat_lists table',
     sql: `
       CREATE TABLE IF NOT EXISTS threat_lists (

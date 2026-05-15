@@ -126,6 +126,26 @@ class TelegramNotifier {
     return await this.sendMessage(msg);
   }
 
+  async notifyBrowserIssues(issues) {
+    if (!issues?.length) return null;
+    const statusEmoji = { redirected: '🔀', ssl_error: '🔒', parked: '🅿️' };
+    const statusLabel = { redirected: 'Redirect hijack', ssl_error: 'SSL error', parked: 'Parked/for sale' };
+    const count = issues.length;
+    let msg = `🌐 <b>BROWSER SCAN ALERT</b>\n\n`;
+    msg += `<b>${count} domain${count > 1 ? 's' : ''} with issues detected</b>\n\n`;
+    issues.forEach((d, i) => {
+      const emoji = statusEmoji[d.status] || '⚠️';
+      msg += `${i + 1}. ${emoji} <b>${d.domain}</b>\n`;
+      if (d.category) msg += `   📁 ${d.category}\n`;
+      msg += `   Issue: ${statusLabel[d.status] || d.status}\n`;
+      if (d.redirectTarget) msg += `   ↳ Redirects to: <code>${d.redirectTarget}</code>\n`;
+      msg += `   🕐 ${new Date(d.scanDate).toLocaleString()}\n\n`;
+    });
+    msg += `🔗 <a href="${process.env.DASHBOARD_URL || ''}">View Dashboard</a>`;
+    msg += `\n\n<i>Automated alert from Domain Safety Monitor</i>`;
+    return await this.sendMessage(msg);
+  }
+
   /**
    * Send scan summary
    */

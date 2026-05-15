@@ -315,6 +315,11 @@
         .badge-suspicious { background: #feebc8; color: #7c2d12; }
         .badge-pending { background: #e2e8f0; color: #4a5568; }
         .badge-unknown { background: #e2e8f0; color: #4a5568; }
+        .browser-badge { font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 600; white-space: nowrap; }
+        .browser-badge-redirected { background: #fef3c7; color: #92400e; }
+        .browser-badge-ssl_error  { background: #fee2e2; color: #991b1b; }
+        .browser-badge-parked     { background: #ede9fe; color: #5b21b6; }
+        .browser-badge-unreachable{ background: #f1f5f9; color: #475569; }
         .status-suspicious { background: #ed8936; animation: pulse-orange 1.5s infinite; }
         @keyframes pulse-orange {
             0% { box-shadow: 0 0 0 0 rgba(237,137,54,0.6); }
@@ -856,6 +861,20 @@
             } catch {}
             const selected = selectedIds.has(d.id);
 
+            let browserBadge = '';
+            if (d.browser_status && d.browser_status !== 'safe') {
+                const browserIcons = { redirected: '🔀', ssl_error: '🔒', parked: '🅿️', unreachable: '⚫' };
+                const browserLabels = {
+                    redirected: `Redirects → ${d.browser_redirect_target || '?'}`,
+                    ssl_error: 'SSL Error',
+                    parked: 'Parked',
+                    unreachable: 'Unreachable',
+                };
+                const icon = browserIcons[d.browser_status] || '⚠️';
+                const label = browserLabels[d.browser_status] || d.browser_status;
+                browserBadge = `<span class="browser-badge browser-badge-${d.browser_status}" title="Browser check">${icon} ${label}</span>`;
+            }
+
             return `
                 <div class="domain-item ${selected ? 'selected' : ''}" id="item-${d.id}">
                     <input type="checkbox" class="domain-checkbox" ${selected ? 'checked' : ''}
@@ -865,6 +884,7 @@
                         <div class="domain-name">${d.domain}</div>
                         <div class="domain-meta-row">
                             ${catBadge}
+                            ${browserBadge}
                             <span class="domain-last-scan">${lastScan}</span>
                         </div>
                         ${d.notes ? `<div class="domain-notes">📝 ${d.notes}</div>` : ''}

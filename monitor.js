@@ -2,6 +2,7 @@ const { execute: dbExecute } = require('./db');
 const db = { execute: dbExecute };
 const SafeBrowsingChecker = require('./safe-browsing');
 const SafeBrowsingUpdateClient = require('./lib/safebrowsing-update');
+const { browserCheckDomains } = require('./lib/browser-checker');
 const TelegramNotifier = require('./telegram-notifier');
 require('dotenv').config();
 
@@ -11,6 +12,7 @@ class DomainMonitor {
     this.updateClient = new SafeBrowsingUpdateClient(db);
     this.telegram = new TelegramNotifier();
     this.updateClientReady = false;
+    this.browserScanRunning = false;
   }
 
   async ensureUpdateClient() {
@@ -260,6 +262,78 @@ class DomainMonitor {
     } catch (error) {
       console.error('Error fetching stats:', error);
       throw error;
+    }
+  }
+  async browserScanDomains() {
+    if (this.browserScanRunning) {
+      console.log('⏭️ Browser scan already running, skipping');
+      return;
+    }
+    this.browserScanRunning = true;
+    console.log('\n🌐 Starting browser scan...');
+
+    try {
+      const domains = await this.getActiveDomains();
+      if (!domains.length) {
+        console.log('ℹ️ No domains to browser-scan');
+        return;
+      }
+
+      const domainUrls = domains.map(d => d.domain);
+      const results = await browserCheckDomains(domainUrls);
+
+      const resultByDomain = {};
+      for (const r of results) resultByDomain[r.domain] = r;
+
+      const ids = [], statuses = [], targets = [];
+      const newIssues = [];
+
+      for (const domain of domains) {
+        const result = resultByDomain[domain.domain];
+        if (!result) continue;
+
+        const { status, redirectTarget = null } = result;
+        ids.push(domain.id);
+        statuses.push(status);
+        targets.push(redirectTarget);
+
+        const prevStatus = domain.browser_status;
+        if (status !== 'safe' && status !== prevStatus) {
+          newIssues.push({
+            domain: domain.domain, category: domain.category_name,
+            status, redirectTarget, scanDate: new Date()
+          });
+        }
+
+        if (status !== 'safe') {
+          const icon = status === 'redirected' ? '🔀' : status === 'ssl_error' ? '🔒' : status === 'parked' ? '🅿️' : '⚫';
+          console.log(`${icon} ${domain.domain}: ${status}${redirectTarget ? ` → ${redirectTarget}` : ''}`);
+        }
+      }
+
+      if (ids.length) {
+        await db.execute(
+          `UPDATE domains SET
+             browser_status = v.s,
+             browser_redirect_target = v.t,
+             last_browser_check = NOW()
+           FROM (SELECT unnest($1::int[]) id, unnest($2::text[]) s, unnest($3::text[]) t) v
+           WHERE domains.id = v.id`,
+          [ids, statuses, targets]
+        );
+      }
+
+      const issueCount = results.filter(r => r.status !== 'safe').length;
+      console.log(`🌐 Browser scan done: ${domains.length - issueCount} safe, ${issueCount} with issues\n`);
+
+      const alertable = newIssues.filter(i => ['redirected', 'ssl_error', 'parked'].includes(i.status));
+      if (alertable.length) {
+        await this.telegram.notifyBrowserIssues(alertable).catch(e => console.error('Telegram error:', e.message));
+      }
+    } catch (error) {
+      console.error('❌ Browser scan error:', error.message);
+    } finally {
+      this.browserScanRunning = false;
     }
   }
 }
