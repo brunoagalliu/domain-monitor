@@ -61,13 +61,11 @@ app.get('/api/test-detection', async (req, res) => {
     (async () => {
       const t = Date.now();
       try {
-        monitor.updateClient.nextFetch = 0; // bypass minimumWaitDuration for test
-        await monitor.updateClient.fetchUpdates();
         const results = await monitor.updateClient.checkDomains([domain]);
         const match = results[domain];
-        log.push({ method: 'Update API', elapsed: Date.now() - t, at: ts(), flagged: !!match, detail: match?.threatType || null });
+        log.push({ method: 'Update API (v5)', elapsed: Date.now() - t, at: ts(), flagged: !!match, detail: match?.threatType || null });
       } catch (e) {
-        log.push({ method: 'Update API', elapsed: Date.now() - t, at: ts(), flagged: false, detail: 'ERROR: ' + e.message });
+        log.push({ method: 'Update API (v5)', elapsed: Date.now() - t, at: ts(), flagged: false, detail: 'ERROR: ' + e.message });
       }
     })(),
     (async () => {
@@ -115,14 +113,6 @@ cron.schedule('*/2 * * * *', async () => {
   }
 });
 
-// Cron: refresh Safe Browsing threat lists (self-throttled by minimumWaitDuration)
-cron.schedule('*/2 * * * *', async () => {
-  try {
-    await monitor.updateClient.fetchUpdates();
-  } catch (err) {
-    console.error('Threat list refresh error:', err.message);
-  }
-});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

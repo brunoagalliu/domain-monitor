@@ -1,7 +1,7 @@
 const { execute: dbExecute } = require('./db');
 const db = { execute: dbExecute };
 const SafeBrowsingChecker = require('./safe-browsing');
-const SafeBrowsingUpdateClient = require('./lib/safebrowsing-update');
+const SafeBrowsingV5Client = require('./lib/safebrowsing-v5');
 const BrowserChecker = require('./lib/browser-checker');
 const TelegramNotifier = require('./telegram-notifier');
 require('dotenv').config();
@@ -9,19 +9,10 @@ require('dotenv').config();
 class DomainMonitor {
   constructor() {
     this.checker = new SafeBrowsingChecker();
-    this.updateClient = new SafeBrowsingUpdateClient(db);
+    this.updateClient = new SafeBrowsingV5Client();
     this.telegram = new TelegramNotifier();
-    this.updateClientReady = false;
     this.browserChecker = new BrowserChecker();
     this.browserScanRunning = false;
-  }
-
-  async ensureUpdateClient() {
-    if (this.updateClientReady) return;
-    await this.updateClient.init();
-    this.updateClientReady = true;
-    // Fetch threat lists immediately if empty
-    await this.updateClient.fetchUpdates();
   }
 
   async addDomain(domain, notes = '', categoryId = null) {
@@ -98,8 +89,6 @@ class DomainMonitor {
       console.log(`📋 Scanning ${domains.length} domain(s)...`);
       const domainUrls = domains.map(d => d.domain);
 
-      // Run both APIs in parallel
-      await this.ensureUpdateClient();
       const domainIds = domains.map(d => d.id);
 
       // Run both APIs + batch-fetch recent scan history in parallel
