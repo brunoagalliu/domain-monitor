@@ -316,6 +316,7 @@
         .badge-pending { background: #e2e8f0; color: #4a5568; }
         .badge-unknown { background: #e2e8f0; color: #4a5568; }
         .browser-badge { font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 600; white-space: nowrap; }
+        .browser-badge-dangerous  { background: #fee2e2; color: #7f1d1d; }
         .browser-badge-redirected { background: #fef3c7; color: #92400e; }
         .browser-badge-ssl_error  { background: #fee2e2; color: #991b1b; }
         .browser-badge-parked     { background: #ede9fe; color: #5b21b6; }
@@ -863,8 +864,9 @@
 
             let browserBadge = '';
             if (d.browser_status && d.browser_status !== 'safe') {
-                const browserIcons = { redirected: '🔀', ssl_error: '🔒', parked: '🅿️', unreachable: '⚫' };
+                const browserIcons = { dangerous: '🚫', redirected: '🔀', ssl_error: '🔒', parked: '🅿️', unreachable: '⚫' };
                 const browserLabels = {
+                    dangerous: 'Dangerous (Chrome blocked)',
                     redirected: `Redirects → ${d.browser_redirect_target || '?'}`,
                     ssl_error: 'SSL Error',
                     parked: 'Parked',

@@ -326,7 +326,7 @@ class DomainMonitor {
       const issueCount = results.filter(r => r.status !== 'safe').length;
       console.log(`🌐 Browser scan done: ${domains.length - issueCount} safe, ${issueCount} with issues\n`);
 
-      const alertable = newIssues.filter(i => ['redirected', 'ssl_error', 'parked'].includes(i.status));
+      const alertable = newIssues.filter(i => ['dangerous', 'redirected', 'ssl_error', 'parked'].includes(i.status));
       if (alertable.length) {
         await this.telegram.notifyBrowserIssues(alertable).catch(e => console.error('Telegram error:', e.message));
       }
