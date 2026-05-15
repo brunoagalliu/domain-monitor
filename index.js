@@ -6,6 +6,7 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const monitor = new DomainMonitor();
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
@@ -60,6 +61,7 @@ app.get('/api/test-detection', async (req, res) => {
     (async () => {
       const t = Date.now();
       try {
+        monitor.updateClient.nextFetch = 0; // bypass minimumWaitDuration for test
         await monitor.updateClient.fetchUpdates();
         const results = await monitor.updateClient.checkDomains([domain]);
         const match = results[domain];
@@ -96,7 +98,6 @@ app.get('/api/migrate', async (req, res) => {
 });
 
 // Cron: scan every minute
-const monitor = new DomainMonitor();
 cron.schedule('* * * * *', async () => {
   try {
     await monitor.scanDomains();
