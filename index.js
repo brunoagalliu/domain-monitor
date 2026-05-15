@@ -61,9 +61,17 @@ app.get('/api/test-detection', async (req, res) => {
     (async () => {
       const t = Date.now();
       try {
+        const crypto = require('crypto');
+        const { urlExpressions } = require('./lib/safebrowsing-v5');
+        const exprs = urlExpressions(domain);
+        const prefixMap = {};
+        for (const e of exprs) {
+          const hash = crypto.createHash('sha256').update(e).digest();
+          prefixMap[e] = hash.slice(0, 4).toString('base64url');
+        }
         const results = await monitor.updateClient.checkDomains([domain]);
         const match = results[domain];
-        log.push({ method: 'Update API (v5)', elapsed: Date.now() - t, at: ts(), flagged: !!match, detail: match?.threatType || null });
+        log.push({ method: 'Update API (v5)', elapsed: Date.now() - t, at: ts(), flagged: !!match, detail: match?.threatType || null, debug: { prefixes: prefixMap } });
       } catch (e) {
         log.push({ method: 'Update API (v5)', elapsed: Date.now() - t, at: ts(), flagged: false, detail: 'ERROR: ' + e.message });
       }
