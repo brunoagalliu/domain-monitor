@@ -65,24 +65,9 @@ app.get('/api/test-detection', async (req, res) => {
     (async () => {
       const t = Date.now();
       try {
-        const crypto = require('crypto');
-        const { urlExpressions } = require('./lib/webrisk');
-        const exprs = urlExpressions(domain);
-        const prefixMap = {};
-        for (const e of exprs) {
-          const hash = crypto.createHash('sha256').update(e).digest();
-          prefixMap[e] = hash.slice(0, 4).toString('base64url');
-        }
-        const axios = require('axios');
-        const key = process.env.GOOGLE_API_KEY;
-        // URI search — checks if domain is in Web Risk DB at all
-        const uriParams = new URLSearchParams({ key, uri: `http://${domain}/` });
-        ['MALWARE','SOCIAL_ENGINEERING','UNWANTED_SOFTWARE'].forEach(t => uriParams.append('threatTypes', t));
-        const uriRes = await axios.get(`https://webrisk.googleapis.com/v1/uris:search?${uriParams}`, { timeout: 10000 }).catch(e => ({ data: { error: e.response?.data?.error?.message || e.message } }));
-
         const results = await monitor.updateClient.checkDomains([domain]);
         const match = results[domain];
-        log.push({ method: 'Web Risk API', elapsed: Date.now() - t, at: ts(), flagged: !!match, detail: match?.threatType || null, debug: { prefixes: prefixMap, uriSearch: uriRes.data } });
+        log.push({ method: 'Web Risk API', elapsed: Date.now() - t, at: ts(), flagged: !!match, detail: match?.threatType || null });
       } catch (e) {
         log.push({ method: 'Web Risk API', elapsed: Date.now() - t, at: ts(), flagged: false, detail: 'ERROR: ' + e.message });
       }
