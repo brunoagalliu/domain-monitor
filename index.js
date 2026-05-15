@@ -117,6 +117,15 @@ cron.schedule('*/2 * * * *', async () => {
   }
 });
 
+// Cron: refresh Web Risk hash lists every 2 minutes (self-throttled by nextFetch internally)
+cron.schedule('*/2 * * * *', async () => {
+  try {
+    await monitor.updateClient.fetchUpdates();
+  } catch (err) {
+    console.error('Web Risk list refresh error:', err.message);
+  }
+});
+
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

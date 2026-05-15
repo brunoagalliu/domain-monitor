@@ -1,7 +1,7 @@
 const { execute: dbExecute } = require('./db');
 const db = { execute: dbExecute };
 const SafeBrowsingChecker = require('./safe-browsing');
-const WebRiskClient = require('./lib/webrisk');
+const WebRiskUpdateClient = require('./lib/webrisk-update');
 const BrowserChecker = require('./lib/browser-checker');
 const TelegramNotifier = require('./telegram-notifier');
 require('dotenv').config();
@@ -9,10 +9,11 @@ require('dotenv').config();
 class DomainMonitor {
   constructor() {
     this.checker = new SafeBrowsingChecker();
-    this.updateClient = new WebRiskClient();
+    this.updateClient = new WebRiskUpdateClient(db);
     this.telegram = new TelegramNotifier();
     this.browserChecker = new BrowserChecker();
     this.browserScanRunning = false;
+    this.updateClientReady = false;
   }
 
   async addDomain(domain, notes = '', categoryId = null) {
@@ -77,6 +78,12 @@ class DomainMonitor {
   }
 
   async scanDomains() {
+    if (!this.updateClientReady) {
+      await this.updateClient.init();
+      await this.updateClient.fetchUpdates();
+      this.updateClientReady = true;
+    }
+
     console.log('\n🔍 Starting domain safety scan...');
 
     try {
