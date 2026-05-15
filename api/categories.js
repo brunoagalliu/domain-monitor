@@ -14,35 +14,21 @@ module.exports = async (req, res) => {
   try {
     if (req.method === 'GET') {
       const [categories] = await db.execute(`
-        SELECT id, name, color, created_at FROM categories ORDER BY name
+        SELECT
+          c.id, c.name, c.color, c.created_at,
+          COUNT(DISTINCT d.id)::int                                                        AS domain_count,
+          COUNT(DISTINCT CASE WHEN latest.is_safe = true  THEN d.id END)::int             AS safe_count,
+          COUNT(DISTINCT CASE WHEN latest.is_safe = false THEN d.id END)::int             AS flagged_count
+        FROM categories c
+        LEFT JOIN domains d ON d.category_id = c.id AND d.is_active = true
+        LEFT JOIN LATERAL (
+          SELECT is_safe FROM scan_results
+          WHERE domain_id = d.id
+          ORDER BY id DESC LIMIT 1
+        ) latest ON true
+        GROUP BY c.id, c.name, c.color, c.created_at
+        ORDER BY c.name
       `);
-
-      for (let cat of categories) {
-        const [domainCount] = await db.execute(
-          'SELECT COUNT(*)::int as count FROM domains WHERE category_id = $1 AND is_active = true',
-          [cat.id]
-        );
-        cat.domain_count = domainCount[0].count || 0;
-
-        const [safeCount] = await db.execute(`
-          SELECT COUNT(DISTINCT d.id)::int as count
-          FROM domains d
-          JOIN scan_results sr ON d.id = sr.domain_id
-          WHERE d.category_id = $1 AND d.is_active = true AND sr.is_safe = true
-            AND sr.id = (SELECT MAX(sr2.id) FROM scan_results sr2 WHERE sr2.domain_id = d.id)
-        `, [cat.id]);
-        cat.safe_count = safeCount[0].count || 0;
-
-        const [flaggedCount] = await db.execute(`
-          SELECT COUNT(DISTINCT d.id)::int as count
-          FROM domains d
-          JOIN scan_results sr ON d.id = sr.domain_id
-          WHERE d.category_id = $1 AND d.is_active = true AND sr.is_safe = false
-            AND sr.id = (SELECT MAX(sr2.id) FROM scan_results sr2 WHERE sr2.domain_id = d.id)
-        `, [cat.id]);
-        cat.flagged_count = flaggedCount[0].count || 0;
-      }
-
       return res.status(200).json(categories);
     }
 

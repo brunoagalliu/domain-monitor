@@ -97,101 +97,102 @@ class DomainMonitor {
 
       // Run both APIs in parallel
       await this.ensureUpdateClient();
-      const [lookupResults, updateResults] = await Promise.all([
+      const domainIds = domains.map(d => d.id);
+
+      // Run both APIs + batch-fetch recent scan history in parallel
+      const [lookupResults, updateResults, recentScansRows] = await Promise.all([
         this.checker.checkDomains(domainUrls),
-        this.updateClient.checkDomains(domainUrls)
+        this.updateClient.checkDomains(domainUrls),
+        db.execute(`
+          SELECT domain_id, is_safe
+          FROM (
+            SELECT domain_id, is_safe,
+                   ROW_NUMBER() OVER (PARTITION BY domain_id ORDER BY id DESC) AS rn
+            FROM scan_results WHERE domain_id = ANY($1)
+          ) ranked WHERE rn <= 10
+        `, [domainIds]).then(([rows]) => rows)
       ]);
+
+      // Index recent scans by domain_id
+      const recentByDomain = {};
+      for (const row of recentScansRows) {
+        (recentByDomain[row.domain_id] ??= []).push(row);
+      }
 
       let safeCount = 0, flaggedCount = 0, suspiciousCount = 0;
       const newlyFlagged = [], newlyCleared = [], newlySuspicious = [];
+      const toSetFlagged = [], toClearFlagged = [], toSetSuspicious = [], toClearSuspicious = [];
+      const scanRows = []; // for batch insert
 
       for (const domain of domains) {
         const lookup = lookupResults[domain.domain];
-        const updateMatch = updateResults[domain.domain]; // { threatType } or undefined
-
+        const updateMatch = updateResults[domain.domain];
         const lookupFlagged = !lookup.is_safe;
         const updateFlagged = !!updateMatch;
 
-        // Fetch last 10 scan results for cleared confirmation
-        const [recentScans] = await db.execute(
-          `SELECT is_safe FROM scan_results WHERE domain_id = $1 ORDER BY id DESC LIMIT 10`,
-          [domain.id]
-        );
-        const allSafe = recentScans.length >= 10 && recentScans.every(s => s.is_safe === true);
-        const last3Safe = recentScans.length >= 3 && recentScans.slice(0, 3).every(s => s.is_safe === true);
+        const recent = recentByDomain[domain.id] || [];
+        const allSafe  = recent.length >= 10 && recent.every(s => s.is_safe === true);
+        const last3Safe = recent.length >= 3  && recent.slice(0, 3).every(s => s.is_safe === true);
 
         if (lookupFlagged) {
-          // ── Lookup API flagged ──────────────────────────────────────
           flaggedCount++;
           if (!domain.is_flagged) {
-            await db.execute(
-              `UPDATE domains SET is_flagged = true, is_suspicious = false WHERE id = $1`,
-              [domain.id]
-            );
+            toSetFlagged.push(domain.id);
             newlyFlagged.push({
-              domain: domain.domain,
-              category: domain.category_name,
+              domain: domain.domain, category: domain.category_name,
               threats: lookup.threats.map(t => t.threatType).filter(Boolean),
               scanDate: new Date()
             });
-          } else if (domain.is_suspicious) {
-            // Upgrade: was suspicious, now confirmed flagged
-            await db.execute(
-              `UPDATE domains SET is_flagged = true, is_suspicious = false WHERE id = $1`,
-              [domain.id]
-            );
           }
+          if (domain.is_suspicious) toClearSuspicious.push(domain.id);
         } else if (updateFlagged && !domain.is_flagged) {
-          // ── Update API flagged, Lookup still safe → suspicious ──────
           suspiciousCount++;
           if (!domain.is_suspicious) {
-            await db.execute(
-              `UPDATE domains SET is_suspicious = true WHERE id = $1`,
-              [domain.id]
-            );
+            toSetSuspicious.push(domain.id);
             newlySuspicious.push({
-              domain: domain.domain,
-              category: domain.category_name,
-              threatType: updateMatch.threatType,
-              scanDate: new Date()
+              domain: domain.domain, category: domain.category_name,
+              threatType: updateMatch.threatType, scanDate: new Date()
             });
           }
         } else {
-          // ── Both APIs say safe ──────────────────────────────────────
           safeCount++;
-
           if (domain.is_flagged && allSafe) {
-            await db.execute(
-              `UPDATE domains SET is_flagged = false WHERE id = $1`,
-              [domain.id]
-            );
+            toClearFlagged.push(domain.id);
             newlyCleared.push({ domain: domain.domain, category: domain.category_name, scanDate: new Date() });
           }
-
           if (domain.is_suspicious && !updateFlagged && last3Safe) {
-            await db.execute(
-              `UPDATE domains SET is_suspicious = false WHERE id = $1`,
-              [domain.id]
-            );
+            toClearSuspicious.push(domain.id);
           }
         }
 
-        // Save scan result
-        await db.execute(
-          `INSERT INTO scan_results (domain_id, is_safe, threat_types, platform_types, threat_entry_types)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [
-            domain.id,
-            lookup.is_safe,
-            JSON.stringify(lookup.threats.map(t => t.threatType).filter(Boolean)),
-            JSON.stringify(lookup.threats.map(t => t.platformType).filter(Boolean)),
-            JSON.stringify(lookup.threats.map(t => t.threatEntryType).filter(Boolean))
-          ]
-        );
+        scanRows.push([
+          domain.id, lookup.is_safe,
+          JSON.stringify(lookup.threats.map(t => t.threatType).filter(Boolean)),
+          JSON.stringify(lookup.threats.map(t => t.platformType).filter(Boolean)),
+          JSON.stringify(lookup.threats.map(t => t.threatEntryType).filter(Boolean))
+        ]);
 
-        const statusIcon = lookupFlagged ? '🚨' : updateFlagged ? '⚠️' : '✅';
-        const statusLabel = lookupFlagged ? 'FLAGGED' : updateFlagged ? 'SUSPICIOUS' : 'SAFE';
-        console.log(`${statusIcon} ${domain.domain}: ${statusLabel}`);
+        const icon = lookupFlagged ? '🚨' : updateFlagged ? '⚠️' : '✅';
+        console.log(`${icon} ${domain.domain}: ${lookupFlagged ? 'FLAGGED' : updateFlagged ? 'SUSPICIOUS' : 'SAFE'}`);
+      }
+
+      // Batch UPDATE domains
+      await Promise.all([
+        toSetFlagged.length    && db.execute('UPDATE domains SET is_flagged = true,  is_suspicious = false WHERE id = ANY($1)', [toSetFlagged]),
+        toClearFlagged.length  && db.execute('UPDATE domains SET is_flagged = false WHERE id = ANY($1)', [toClearFlagged]),
+        toSetSuspicious.length && db.execute('UPDATE domains SET is_suspicious = true  WHERE id = ANY($1)', [toSetSuspicious]),
+        toClearSuspicious.length && db.execute('UPDATE domains SET is_suspicious = false WHERE id = ANY($1)', [toClearSuspicious]),
+      ].filter(Boolean));
+
+      // Batch INSERT scan results
+      if (scanRows.length) {
+        const placeholders = scanRows.map((_, i) =>
+          `($${i*5+1},$${i*5+2},$${i*5+3},$${i*5+4},$${i*5+5})`
+        ).join(',');
+        await db.execute(
+          `INSERT INTO scan_results (domain_id, is_safe, threat_types, platform_types, threat_entry_types) VALUES ${placeholders}`,
+          scanRows.flat()
+        );
       }
 
       console.log(`📊 ${safeCount} safe, ${flaggedCount} flagged, ${suspiciousCount} suspicious`);

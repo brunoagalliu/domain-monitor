@@ -58,6 +58,14 @@ const migrations = [
     sql: `ALTER TABLE domains ADD COLUMN IF NOT EXISTS is_suspicious BOOLEAN DEFAULT false`
   },
   {
+    name: 'Index: domains(is_flagged) partial',
+    sql: `CREATE INDEX IF NOT EXISTS idx_domains_is_flagged ON domains (is_flagged) WHERE is_active = true`
+  },
+  {
+    name: 'Index: domains(is_suspicious) partial',
+    sql: `CREATE INDEX IF NOT EXISTS idx_domains_is_suspicious ON domains (is_suspicious) WHERE is_active = true`
+  },
+  {
     name: 'Create threat_lists table',
     sql: `
       CREATE TABLE IF NOT EXISTS threat_lists (
