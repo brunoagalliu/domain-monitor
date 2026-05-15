@@ -59,9 +59,14 @@ app.get('/api/test-detection', async (req, res) => {
     })(),
     (async () => {
       const t = Date.now();
-      const results = await monitor.updateClient.checkDomains([domain]);
-      const match = results[domain];
-      log.push({ method: 'Update API', elapsed: Date.now() - t, at: ts(), flagged: !!match, detail: match?.threatType || null });
+      try {
+        await monitor.updateClient.fetchUpdates();
+        const results = await monitor.updateClient.checkDomains([domain]);
+        const match = results[domain];
+        log.push({ method: 'Update API', elapsed: Date.now() - t, at: ts(), flagged: !!match, detail: match?.threatType || null });
+      } catch (e) {
+        log.push({ method: 'Update API', elapsed: Date.now() - t, at: ts(), flagged: false, detail: 'ERROR: ' + e.message });
+      }
     })(),
     (async () => {
       const t = Date.now();
