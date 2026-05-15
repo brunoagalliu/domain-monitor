@@ -114,8 +114,8 @@ cron.schedule('*/2 * * * *', async () => {
   }
 });
 
-// Cron: refresh Safe Browsing threat lists every 30 minutes
-cron.schedule('*/30 * * * *', async () => {
+// Cron: refresh Safe Browsing threat lists (self-throttled by minimumWaitDuration)
+cron.schedule('*/2 * * * *', async () => {
   try {
     await monitor.updateClient.fetchUpdates();
   } catch (err) {
