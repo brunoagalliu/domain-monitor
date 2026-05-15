@@ -53,10 +53,14 @@ app.get('/api/test-detection', async (req, res) => {
   await Promise.allSettled([
     (async () => {
       const t = Date.now();
-      const checker = new SafeBrowsingChecker();
-      const results = await checker.checkDomains([domain]);
-      const r = results[domain];
-      log.push({ method: 'Lookup API', elapsed: Date.now() - t, at: ts(), flagged: !r.is_safe, detail: r.threats?.map(t => t.threatType).filter(Boolean).join(', ') || null });
+      try {
+        const checker = new SafeBrowsingChecker();
+        const results = await checker.checkDomains([domain]);
+        const r = results[domain];
+        log.push({ method: 'Lookup API', elapsed: Date.now() - t, at: ts(), flagged: !r.is_safe, detail: r.threats?.map(t => t.threatType).filter(Boolean).join(', ') || null });
+      } catch (e) {
+        log.push({ method: 'Lookup API', elapsed: Date.now() - t, at: ts(), flagged: false, detail: 'ERROR: ' + e.message });
+      }
     })(),
     (async () => {
       const t = Date.now();
