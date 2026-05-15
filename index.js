@@ -39,6 +39,42 @@ app.all('/api/categories/:id', (req, res) => {
 });
 app.all('/api/categories', require('./api/categories'));
 
+// Detection method comparison test
+app.get('/api/test-detection', async (req, res) => {
+  const domain = req.query.domain || 'vbjqzmd.com';
+  const start = Date.now();
+  const log = [];
+  const ts = () => Date.now() - start;
+
+  const SafeBrowsingChecker = require('./safe-browsing');
+  const BrowserChecker = require('./lib/browser-checker');
+
+  await Promise.allSettled([
+    (async () => {
+      const t = Date.now();
+      const checker = new SafeBrowsingChecker();
+      const results = await checker.checkDomains([domain]);
+      const r = results[domain];
+      log.push({ method: 'Lookup API', elapsed: Date.now() - t, at: ts(), flagged: !r.is_safe, detail: r.threats?.map(t => t.threatType).filter(Boolean).join(', ') || null });
+    })(),
+    (async () => {
+      const t = Date.now();
+      const results = await monitor.updateClient.checkDomains([domain]);
+      const match = results[domain];
+      log.push({ method: 'Update API', elapsed: Date.now() - t, at: ts(), flagged: !!match, detail: match?.threatType || null });
+    })(),
+    (async () => {
+      const t = Date.now();
+      const results = await monitor.browserChecker.checkDomains([domain]);
+      const r = results[0];
+      log.push({ method: 'Browser', elapsed: Date.now() - t, at: ts(), flagged: r.status === 'dangerous', detail: r.status });
+    })(),
+  ]);
+
+  log.sort((a, b) => a.at - b.at);
+  res.json({ domain, totalMs: ts(), results: log });
+});
+
 // One-time migration route (remove after first use)
 app.get('/api/migrate', async (req, res) => {
   try {
@@ -80,4 +116,9 @@ cron.schedule('*/30 * * * *', async () => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+});
+
+process.on('SIGTERM', async () => {
+  await monitor.browserChecker.close();
+  process.exit(0);
 });
