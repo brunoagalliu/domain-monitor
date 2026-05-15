@@ -2,7 +2,7 @@ const { execute: dbExecute } = require('./db');
 const db = { execute: dbExecute };
 const SafeBrowsingChecker = require('./safe-browsing');
 const SafeBrowsingUpdateClient = require('./lib/safebrowsing-update');
-const { browserCheckDomains } = require('./lib/browser-checker');
+const BrowserChecker = require('./lib/browser-checker');
 const TelegramNotifier = require('./telegram-notifier');
 require('dotenv').config();
 
@@ -12,6 +12,7 @@ class DomainMonitor {
     this.updateClient = new SafeBrowsingUpdateClient(db);
     this.telegram = new TelegramNotifier();
     this.updateClientReady = false;
+    this.browserChecker = new BrowserChecker();
     this.browserScanRunning = false;
   }
 
@@ -280,7 +281,7 @@ class DomainMonitor {
       }
 
       const domainUrls = domains.map(d => d.domain);
-      const results = await browserCheckDomains(domainUrls);
+      const results = await this.browserChecker.checkDomains(domainUrls);
 
       const resultByDomain = {};
       for (const r of results) resultByDomain[r.domain] = r;
