@@ -239,10 +239,7 @@ class DomainMonitor {
 
     try {
       const domains = await this.getActiveDomains();
-      if (!domains.length) {
-        console.log('ℹ️ No domains to browser-scan');
-        return;
-      }
+      if (!domains.length) return;
 
       const domainUrls = domains.map(d => d.domain);
       const results = await this.browserChecker.checkDomains(domainUrls);
@@ -250,50 +247,40 @@ class DomainMonitor {
       const resultByDomain = {};
       for (const r of results) resultByDomain[r.domain] = r;
 
-      const ids = [], statuses = [], targets = [];
-      const newIssues = [];
+      const ids = [], statuses = [];
+      const newDangerous = [];
 
       for (const domain of domains) {
         const result = resultByDomain[domain.domain];
         if (!result) continue;
 
-        const { status, redirectTarget = null } = result;
+        const { status } = result;
         ids.push(domain.id);
         statuses.push(status);
-        targets.push(redirectTarget);
 
-        const prevStatus = domain.browser_status;
-        if (status !== 'safe' && status !== prevStatus) {
-          newIssues.push({
+        if (status === 'dangerous' && domain.browser_status !== 'dangerous') {
+          newDangerous.push({
             domain: domain.domain, category: domain.category_name,
-            status, redirectTarget, scanDate: new Date()
+            status, scanDate: new Date()
           });
-        }
-
-        if (status !== 'safe') {
-          const icon = status === 'redirected' ? '🔀' : status === 'ssl_error' ? '🔒' : status === 'parked' ? '🅿️' : '⚫';
-          console.log(`${icon} ${domain.domain}: ${status}${redirectTarget ? ` → ${redirectTarget}` : ''}`);
+          console.log(`🚨 ${domain.domain}: dangerous (Safe Browsing)`);
         }
       }
 
       if (ids.length) {
         await db.execute(
-          `UPDATE domains SET
-             browser_status = v.s,
-             browser_redirect_target = v.t,
-             last_browser_check = NOW()
-           FROM (SELECT unnest($1::int[]) id, unnest($2::text[]) s, unnest($3::text[]) t) v
+          `UPDATE domains SET browser_status = v.s, last_browser_check = NOW()
+           FROM (SELECT unnest($1::int[]) id, unnest($2::text[]) s) v
            WHERE domains.id = v.id`,
-          [ids, statuses, targets]
+          [ids, statuses]
         );
       }
 
-      const issueCount = results.filter(r => r.status !== 'safe').length;
-      console.log(`🌐 Browser scan done: ${domains.length - issueCount} safe, ${issueCount} with issues\n`);
+      const dangerousCount = results.filter(r => r.status === 'dangerous').length;
+      console.log(`🌐 Browser scan done: ${domains.length - dangerousCount} safe, ${dangerousCount} dangerous\n`);
 
-      const alertable = newIssues.filter(i => ['dangerous', 'redirected', 'ssl_error', 'parked'].includes(i.status));
-      if (alertable.length) {
-        await this.telegram.notifyBrowserIssues(alertable).catch(e => console.error('Telegram error:', e.message));
+      if (newDangerous.length) {
+        await this.telegram.notifyBrowserIssues(newDangerous).catch(e => console.error('Telegram error:', e.message));
       }
     } catch (error) {
       console.error('❌ Browser scan error:', error.message);
