@@ -128,17 +128,13 @@ class TelegramNotifier {
 
   async notifyBrowserIssues(issues) {
     if (!issues?.length) return null;
-    const statusEmoji = { redirected: '🔀', ssl_error: '🔒', parked: '🅿️' };
-    const statusLabel = { redirected: 'Redirect hijack', ssl_error: 'SSL error', parked: 'Parked/for sale' };
     const count = issues.length;
-    let msg = `🌐 <b>BROWSER SCAN ALERT</b>\n\n`;
-    msg += `<b>${count} domain${count > 1 ? 's' : ''} with issues detected</b>\n\n`;
+    let msg = `🌐 <b>BROWSER DETECTION ALERT</b>\n`;
+    msg += `<i>(Testing — domain not marked flagged until confirmed by Lookup API)</i>\n\n`;
+    msg += `<b>Chrome Safe Browsing blocked ${count} domain${count > 1 ? 's' : ''}:</b>\n\n`;
     issues.forEach((d, i) => {
-      const emoji = statusEmoji[d.status] || '⚠️';
-      msg += `${i + 1}. ${emoji} <b>${d.domain}</b>\n`;
+      msg += `${i + 1}. 🚨 <b>${d.domain}</b>\n`;
       if (d.category) msg += `   📁 ${d.category}\n`;
-      msg += `   Issue: ${statusLabel[d.status] || d.status}\n`;
-      if (d.redirectTarget) msg += `   ↳ Redirects to: <code>${d.redirectTarget}</code>\n`;
       msg += `   🕐 ${new Date(d.scanDate).toLocaleString()}\n\n`;
     });
     msg += `🔗 <a href="${process.env.DASHBOARD_URL || ''}">View Dashboard</a>`;
