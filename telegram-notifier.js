@@ -129,8 +129,7 @@ class TelegramNotifier {
   async notifyBrowserIssues(issues) {
     if (!issues?.length) return null;
     const count = issues.length;
-    let msg = `🌐 <b>BROWSER DETECTION ALERT</b>\n`;
-    msg += `<i>(Testing — domain not marked flagged until confirmed by Lookup API)</i>\n\n`;
+    let msg = `🌐 <b>BROWSER DETECTION ALERT</b>\n\n`;
     msg += `<b>Chrome Safe Browsing blocked ${count} domain${count > 1 ? 's' : ''}:</b>\n\n`;
     issues.forEach((d, i) => {
       msg += `${i + 1}. 🚨 <b>${d.domain}</b>\n`;

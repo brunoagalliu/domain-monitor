@@ -248,7 +248,7 @@ class DomainMonitor {
       for (const r of results) resultByDomain[r.domain] = r;
 
       const ids = [], statuses = [];
-      const newDangerous = [];
+      const newDangerous = [], toSetFlagged = [];
 
       for (const domain of domains) {
         const result = resultByDomain[domain.domain];
@@ -261,20 +261,24 @@ class DomainMonitor {
         if (status === 'dangerous' && domain.browser_status !== 'dangerous') {
           newDangerous.push({
             domain: domain.domain, category: domain.category_name,
-            status, scanDate: new Date()
+            scanDate: new Date()
           });
-          console.log(`🚨 ${domain.domain}: dangerous (Safe Browsing)`);
+          if (!domain.is_flagged) toSetFlagged.push(domain.id);
+          console.log(`🚨 ${domain.domain}: dangerous (browser Safe Browsing)`);
         }
       }
 
-      if (ids.length) {
-        await db.execute(
+      await Promise.all([
+        ids.length && db.execute(
           `UPDATE domains SET browser_status = v.s, last_browser_check = NOW()
            FROM (SELECT unnest($1::int[]) id, unnest($2::text[]) s) v
            WHERE domains.id = v.id`,
           [ids, statuses]
-        );
-      }
+        ),
+        toSetFlagged.length && db.execute(
+          'UPDATE domains SET is_flagged = true WHERE id = ANY($1)', [toSetFlagged]
+        ),
+      ].filter(Boolean));
 
       const dangerousCount = results.filter(r => r.status === 'dangerous').length;
       console.log(`🌐 Browser scan done: ${domains.length - dangerousCount} safe, ${dangerousCount} dangerous\n`);
