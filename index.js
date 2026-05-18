@@ -16,6 +16,8 @@ app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')))
 app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'login.html')));
 app.get('/login.html', (req, res) => res.sendFile(path.join(__dirname, 'login.html')));
 app.get('/categories', (req, res) => res.sendFile(path.join(__dirname, 'categories.html')));
+app.get('/logs', (req, res) => res.sendFile(path.join(__dirname, 'logs.html')));
+app.get('/logs.html', (req, res) => res.sendFile(path.join(__dirname, 'logs.html')));
 
 // Auth routes
 app.all('/api/auth/login', require('./api/auth/login'));
@@ -29,9 +31,10 @@ app.all('/api/domains/:id', (req, res) => {
 });
 app.all('/api/domains', require('./api/domains'));
 
-// Scan + stats routes
+// Scan + stats + logs routes
 app.all('/api/scans', require('./api/scans'));
 app.all('/api/stats', require('./api/stats'));
+app.all('/api/logs', require('./api/logs'));
 
 // Category routes
 app.all('/api/categories/:id', (req, res) => {

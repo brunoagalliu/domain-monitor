@@ -91,6 +91,19 @@ const migrations = [
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `
+  },
+  {
+    name: 'create flag_logs table',
+    sql: `
+      CREATE TABLE IF NOT EXISTS flag_logs (
+        id SERIAL PRIMARY KEY,
+        domain TEXT NOT NULL,
+        category TEXT,
+        method TEXT NOT NULL,
+        threat_type TEXT,
+        detected_at TIMESTAMP DEFAULT NOW()
+      )
+    `
   }
 ];
 

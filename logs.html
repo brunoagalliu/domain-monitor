@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flag Logs — Domain Safety Monitor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+        .header {
+            background: white;
+            border-radius: 16px;
+            padding: 24px 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header h1 { color: #2d3748; font-size: 24px; margin-bottom: 4px; }
+        .header p { color: #718096; font-size: 14px; }
+        .header-actions { display: flex; align-items: center; gap: 10px; }
+        .btn-back {
+            padding: 8px 16px;
+            border-radius: 8px;
+            background: #f7fafc;
+            color: #667eea;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            border: 1px solid #e2e8f0;
+        }
+        .btn-signout {
+            padding: 8px 16px;
+            border-radius: 8px;
+            background: #fff5f5;
+            color: #f56565;
+            font-size: 14px;
+            font-weight: 600;
+            border: 1px solid #fed7d7;
+            cursor: pointer;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .card-header h2 { color: #2d3748; font-size: 18px; }
+        .count-badge {
+            background: #f7fafc;
+            color: #718096;
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        thead th {
+            text-align: left;
+            padding: 10px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #718096;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        tbody tr {
+            border-bottom: 1px solid #f0f4f8;
+            transition: background 0.15s;
+        }
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: #f7fafc; }
+        tbody td {
+            padding: 12px 14px;
+            font-size: 14px;
+            color: #2d3748;
+            vertical-align: middle;
+        }
+        .domain-cell { font-weight: 600; }
+        .method-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .method-lookup { background: #ebf4ff; color: #3182ce; }
+        .method-browser { background: #f0fff4; color: #38a169; }
+        .threat-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            background: #fff5f5;
+            color: #c53030;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .category-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #cbd5e0;
+            margin-right: 6px;
+        }
+        .empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: #a0aec0;
+            font-size: 15px;
+        }
+        .loading { text-align: center; padding: 60px 20px; color: #a0aec0; }
+        .filter-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 18px;
+            flex-wrap: wrap;
+        }
+        .filter-btn {
+            padding: 6px 14px;
+            border-radius: 20px;
+            border: 1.5px solid #e2e8f0;
+            background: white;
+            font-size: 13px;
+            font-weight: 600;
+            color: #718096;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .filter-btn.active { border-color: #667eea; color: #667eea; background: #ebf4ff; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div>
+            <h1>📋 Flag Logs</h1>
+            <p>All domains flagged by each detection method</p>
+        </div>
+        <div class="header-actions">
+            <a href="/" class="btn-back">← Dashboard</a>
+            <button class="btn-signout" onclick="logout()">Sign out</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2>Detection Events</h2>
+            <span class="count-badge" id="countBadge">—</span>
+        </div>
+
+        <div class="filter-bar">
+            <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+            <button class="filter-btn" onclick="setFilter('lookup_api', this)">Lookup API</button>
+            <button class="filter-btn" onclick="setFilter('browser', this)">Browser</button>
+        </div>
+
+        <div id="tableWrap">
+            <div class="loading">Loading…</div>
+        </div>
+    </div>
+</div>
+
+<script>
+const API = '/api';
+let allLogs = [];
+let activeFilter = 'all';
+
+async function init() {
+    const res = await fetch(`${API}/logs`, { credentials: 'include' });
+    if (res.status === 401) { location.href = '/login'; return; }
+    allLogs = await res.json();
+    render();
+}
+
+function setFilter(method, btn) {
+    activeFilter = method;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    render();
+}
+
+function render() {
+    const logs = activeFilter === 'all' ? allLogs : allLogs.filter(l => l.method === activeFilter);
+    document.getElementById('countBadge').textContent = `${logs.length} event${logs.length !== 1 ? 's' : ''}`;
+
+    if (!logs.length) {
+        document.getElementById('tableWrap').innerHTML = `<div class="empty">No flag events recorded yet.</div>`;
+        return;
+    }
+
+    const rows = logs.map(l => {
+        const method = l.method === 'browser'
+            ? `<span class="method-badge method-browser">🌐 Browser</span>`
+            : `<span class="method-badge method-lookup">🔍 Lookup API</span>`;
+        const threat = l.threat_type
+            ? `<span class="threat-badge">${l.threat_type.replace(/_/g, ' ')}</span>`
+            : `<span style="color:#a0aec0">—</span>`;
+        const category = l.category
+            ? `<span class="category-dot"></span>${l.category}`
+            : `<span style="color:#a0aec0">—</span>`;
+        const date = new Date(l.detected_at).toLocaleString();
+        return `<tr>
+            <td class="domain-cell">${l.domain}</td>
+            <td>${method}</td>
+            <td>${threat}</td>
+            <td>${category}</td>
+            <td style="color:#718096;font-size:13px;">${date}</td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('tableWrap').innerHTML = `
+        <table>
+            <thead>
+                <tr>
+                    <th>Domain</th>
+                    <th>Method</th>
+                    <th>Threat Type</th>
+                    <th>Category</th>
+                    <th>Detected At</th>
+                </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>`;
+}
+
+async function logout() {
+    await fetch(`${API}/auth/logout`, { method: 'POST', credentials: 'include' });
+    location.href = '/login';
+}
+
+init();
+</script>
+</body>
+</html>

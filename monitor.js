@@ -154,6 +154,16 @@ class DomainMonitor {
         toClearFlagged.length && db.execute('UPDATE domains SET is_flagged = false WHERE id = ANY($1)', [toClearFlagged]),
       ].filter(Boolean));
 
+      // Log new flags
+      if (newlyFlagged.length) {
+        const logRows = newlyFlagged.map(d => [d.domain, d.category || null, 'lookup_api', d.threats?.[0] || null]);
+        const ph = logRows.map((_, i) => `($${i*4+1},$${i*4+2},$${i*4+3},$${i*4+4})`).join(',');
+        await db.execute(
+          `INSERT INTO flag_logs (domain, category, method, threat_type) VALUES ${ph}`,
+          logRows.flat()
+        );
+      }
+
       // Batch INSERT scan results
       if (scanRows.length) {
         const placeholders = scanRows.map((_, i) =>
@@ -279,6 +289,16 @@ class DomainMonitor {
           'UPDATE domains SET is_flagged = true WHERE id = ANY($1)', [toSetFlagged]
         ),
       ].filter(Boolean));
+
+      // Log new browser flags
+      if (newDangerous.length) {
+        const logRows = newDangerous.map(d => [d.domain, d.category || null, 'browser', null]);
+        const ph = logRows.map((_, i) => `($${i*4+1},$${i*4+2},$${i*4+3},$${i*4+4})`).join(',');
+        await db.execute(
+          `INSERT INTO flag_logs (domain, category, method, threat_type) VALUES ${ph}`,
+          logRows.flat()
+        );
+      }
 
       const dangerousCount = results.filter(r => r.status === 'dangerous').length;
       console.log(`🌐 Browser scan done: ${domains.length - dangerousCount} safe, ${dangerousCount} dangerous\n`);
