@@ -65,16 +65,6 @@ app.get('/api/test-detection', async (req, res) => {
     (async () => {
       const t = Date.now();
       try {
-        const results = await monitor.updateClient.checkDomains([domain]);
-        const match = results[domain];
-        log.push({ method: 'Web Risk API', elapsed: Date.now() - t, at: ts(), flagged: !!match, detail: match?.threatType || null });
-      } catch (e) {
-        log.push({ method: 'Web Risk API', elapsed: Date.now() - t, at: ts(), flagged: false, detail: 'ERROR: ' + e.message });
-      }
-    })(),
-    (async () => {
-      const t = Date.now();
-      try {
         const results = await monitor.browserChecker.checkDomains([domain]);
         const r = results[0];
         log.push({ method: 'Browser', elapsed: Date.now() - t, at: ts(), flagged: r.status === 'dangerous', detail: r.status });
@@ -117,14 +107,6 @@ cron.schedule('*/2 * * * *', async () => {
   }
 });
 
-// Cron: refresh Web Risk hash lists every 2 minutes (self-throttled by nextFetch internally)
-cron.schedule('*/2 * * * *', async () => {
-  try {
-    await monitor.updateClient.fetchUpdates();
-  } catch (err) {
-    console.error('Web Risk list refresh error:', err.message);
-  }
-});
 
 
 app.listen(PORT, () => {

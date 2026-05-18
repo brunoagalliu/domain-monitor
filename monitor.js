@@ -1,7 +1,6 @@
 const { execute: dbExecute } = require('./db');
 const db = { execute: dbExecute };
 const SafeBrowsingChecker = require('./safe-browsing');
-const WebRiskUpdateClient = require('./lib/webrisk-update');
 const BrowserChecker = require('./lib/browser-checker');
 const TelegramNotifier = require('./telegram-notifier');
 require('dotenv').config();
@@ -9,11 +8,9 @@ require('dotenv').config();
 class DomainMonitor {
   constructor() {
     this.checker = new SafeBrowsingChecker();
-    this.updateClient = new WebRiskUpdateClient(db);
     this.telegram = new TelegramNotifier();
     this.browserChecker = new BrowserChecker();
     this.browserScanRunning = false;
-    this.updateClientReady = false;
   }
 
   async addDomain(domain, notes = '', categoryId = null) {
@@ -78,12 +75,6 @@ class DomainMonitor {
   }
 
   async scanDomains() {
-    if (!this.updateClientReady) {
-      await this.updateClient.init();
-      await this.updateClient.fetchUpdates();
-      this.updateClientReady = true;
-    }
-
     console.log('\n🔍 Starting domain safety scan...');
 
     try {
@@ -98,10 +89,9 @@ class DomainMonitor {
 
       const domainIds = domains.map(d => d.id);
 
-      // Run both APIs + batch-fetch recent scan history in parallel
-      const [lookupResults, updateResults, recentScansRows] = await Promise.all([
+      // Run Lookup API + batch-fetch recent scan history in parallel
+      const [lookupResults, recentScansRows] = await Promise.all([
         this.checker.checkDomains(domainUrls),
-        this.updateClient.checkDomains(domainUrls),
         db.execute(`
           SELECT domain_id, is_safe
           FROM (
@@ -118,20 +108,17 @@ class DomainMonitor {
         (recentByDomain[row.domain_id] ??= []).push(row);
       }
 
-      let safeCount = 0, flaggedCount = 0, suspiciousCount = 0;
-      const newlyFlagged = [], newlyCleared = [], newlySuspicious = [];
-      const toSetFlagged = [], toClearFlagged = [], toSetSuspicious = [], toClearSuspicious = [];
-      const scanRows = []; // for batch insert
+      let safeCount = 0, flaggedCount = 0;
+      const newlyFlagged = [], newlyCleared = [];
+      const toSetFlagged = [], toClearFlagged = [];
+      const scanRows = [];
 
       for (const domain of domains) {
         const lookup = lookupResults[domain.domain];
-        const updateMatch = updateResults[domain.domain];
         const lookupFlagged = !lookup.is_safe;
-        const updateFlagged = !!updateMatch;
 
         const recent = recentByDomain[domain.id] || [];
-        const allSafe  = recent.length >= 10 && recent.every(s => s.is_safe === true);
-        const last3Safe = recent.length >= 3  && recent.slice(0, 3).every(s => s.is_safe === true);
+        const allSafe = recent.length >= 10 && recent.every(s => s.is_safe === true);
 
         if (lookupFlagged) {
           flaggedCount++;
@@ -143,24 +130,11 @@ class DomainMonitor {
               scanDate: new Date()
             });
           }
-          if (domain.is_suspicious) toClearSuspicious.push(domain.id);
-        } else if (updateFlagged && !domain.is_flagged) {
-          suspiciousCount++;
-          if (!domain.is_suspicious) {
-            toSetSuspicious.push(domain.id);
-            newlySuspicious.push({
-              domain: domain.domain, category: domain.category_name,
-              threatType: updateMatch.threatType, scanDate: new Date()
-            });
-          }
         } else {
           safeCount++;
           if (domain.is_flagged && allSafe) {
             toClearFlagged.push(domain.id);
             newlyCleared.push({ domain: domain.domain, category: domain.category_name, scanDate: new Date() });
-          }
-          if (domain.is_suspicious && !updateFlagged && last3Safe) {
-            toClearSuspicious.push(domain.id);
           }
         }
 
@@ -171,16 +145,13 @@ class DomainMonitor {
           JSON.stringify(lookup.threats.map(t => t.threatEntryType).filter(Boolean))
         ]);
 
-        const icon = lookupFlagged ? '🚨' : updateFlagged ? '⚠️' : '✅';
-        console.log(`${icon} ${domain.domain}: ${lookupFlagged ? 'FLAGGED' : updateFlagged ? 'SUSPICIOUS' : 'SAFE'}`);
+        console.log(`${lookupFlagged ? '🚨' : '✅'} ${domain.domain}: ${lookupFlagged ? 'FLAGGED' : 'SAFE'}`);
       }
 
       // Batch UPDATE domains
       await Promise.all([
-        toSetFlagged.length    && db.execute('UPDATE domains SET is_flagged = true,  is_suspicious = false WHERE id = ANY($1)', [toSetFlagged]),
-        toClearFlagged.length  && db.execute('UPDATE domains SET is_flagged = false WHERE id = ANY($1)', [toClearFlagged]),
-        toSetSuspicious.length && db.execute('UPDATE domains SET is_suspicious = true  WHERE id = ANY($1)', [toSetSuspicious]),
-        toClearSuspicious.length && db.execute('UPDATE domains SET is_suspicious = false WHERE id = ANY($1)', [toClearSuspicious]),
+        toSetFlagged.length   && db.execute('UPDATE domains SET is_flagged = true WHERE id = ANY($1)', [toSetFlagged]),
+        toClearFlagged.length && db.execute('UPDATE domains SET is_flagged = false WHERE id = ANY($1)', [toClearFlagged]),
       ].filter(Boolean));
 
       // Batch INSERT scan results
@@ -194,14 +165,11 @@ class DomainMonitor {
         );
       }
 
-      console.log(`📊 ${safeCount} safe, ${flaggedCount} flagged, ${suspiciousCount} suspicious`);
+      console.log(`📊 ${safeCount} safe, ${flaggedCount} flagged`);
 
       // Telegram notifications
       if (newlyFlagged.length > 0) {
         await this.telegram.notifyFlaggedDomains(newlyFlagged).catch(e => console.error('Telegram error:', e.message));
-      }
-      if (newlySuspicious.length > 0) {
-        await this.telegram.notifySuspiciousDomains(newlySuspicious).catch(e => console.error('Telegram error:', e.message));
       }
       if (newlyCleared.length > 0) {
         await this.telegram.notifyClearedDomains(newlyCleared).catch(e => console.error('Telegram error:', e.message));
@@ -214,7 +182,7 @@ class DomainMonitor {
       if (pruned.rowCount > 0) console.log(`🗑️ Pruned ${pruned.rowCount} old scan record(s)`);
 
       console.log(`✨ Scan completed at ${new Date().toLocaleTimeString()}\n`);
-      return { scanned: domains.length, safe: safeCount, flagged: flaggedCount, suspicious: suspiciousCount, newFlags: newlyFlagged.length };
+      return { scanned: domains.length, safe: safeCount, flagged: flaggedCount, newFlags: newlyFlagged.length };
     } catch (error) {
       console.error('❌ Scan error:', error.message);
       throw error;
