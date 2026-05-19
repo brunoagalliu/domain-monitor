@@ -265,6 +265,7 @@ class DomainMonitor {
         if (!result) continue;
 
         const { status } = result;
+        if (status !== 'safe' && status !== 'dangerous') continue;
         ids.push(domain.id);
         statuses.push(status);
 
