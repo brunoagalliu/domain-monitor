@@ -43,6 +43,24 @@ app.all('/api/categories/:id', (req, res) => {
 });
 app.all('/api/categories', require('./api/categories'));
 
+// Browser scanner health check
+app.get('/api/browser-status', async (req, res) => {
+  const { execute } = require('./db');
+  const [rows] = await execute(`
+    SELECT
+      COUNT(*) FILTER (WHERE last_browser_check IS NOT NULL)::int AS checked,
+      COUNT(*) FILTER (WHERE browser_status = 'safe')::int            AS safe,
+      COUNT(*) FILTER (WHERE browser_status = 'dangerous')::int       AS dangerous,
+      MAX(last_browser_check)                                          AS last_check
+    FROM domains WHERE is_active = true
+  `);
+  res.json({
+    scanRunning: monitor.browserScanRunning,
+    browserReady: !!monitor.browserChecker.context,
+    ...rows[0],
+  });
+});
+
 // Detection method comparison test
 app.get('/api/test-detection', async (req, res) => {
   const domain = req.query.domain || 'vbjqzmd.com';
