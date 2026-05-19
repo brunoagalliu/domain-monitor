@@ -57,6 +57,7 @@ app.get('/api/browser-status', async (req, res) => {
   res.json({
     scanRunning: monitor.browserScanRunning,
     browserReady: !!monitor.browserChecker.context,
+    lastError: monitor.browserChecker.lastError || null,
     ...rows[0],
   });
 });
