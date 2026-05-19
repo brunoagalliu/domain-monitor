@@ -51,7 +51,6 @@ app.get('/api/test-detection', async (req, res) => {
   const ts = () => Date.now() - start;
 
   const SafeBrowsingChecker = require('./safe-browsing');
-  const BrowserChecker = require('./lib/browser-checker');
 
   await Promise.allSettled([
     (async () => {
@@ -67,6 +66,10 @@ app.get('/api/test-detection', async (req, res) => {
     })(),
     (async () => {
       const t = Date.now();
+      if (monitor.browserScanRunning) {
+        log.push({ method: 'Browser', elapsed: 0, at: ts(), flagged: false, detail: 'skipped — browser scan in progress' });
+        return;
+      }
       try {
         const results = await monitor.browserChecker.checkDomains([domain]);
         const r = results[0];
