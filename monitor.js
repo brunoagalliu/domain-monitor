@@ -132,7 +132,10 @@ class DomainMonitor {
           }
         } else {
           safeCount++;
-          if (domain.is_flagged && allSafe) {
+          // Don't clear a browser-flagged domain on Lookup API alone — wait until
+          // Chrome also confirms it's safe, preventing premature clears when the
+          // browser detects a threat before Google's hash lists catch up.
+          if (domain.is_flagged && allSafe && domain.browser_status !== 'dangerous') {
             toClearFlagged.push(domain.id);
             newlyCleared.push({ domain: domain.domain, category: domain.category_name, scanDate: new Date() });
           }
