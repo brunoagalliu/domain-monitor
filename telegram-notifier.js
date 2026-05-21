@@ -130,11 +130,11 @@ class TelegramNotifier {
     if (!issues?.length) return null;
     const count = issues.length;
     let msg = `🔴🔴🔴 <b>DANGEROUS — BROWSER ALERT</b> 🔴🔴🔴\n\n`;
-    msg += `<b>Chrome Safe Browsing blocked ${count} domain${count > 1 ? 's' : ''}:</b>\n`;
-    msg += `<i>Detected before Google Lookup API — treat as high priority</i>\n\n`;
+    msg += `<b>Chrome Safe Browsing blocked ${count} domain${count > 1 ? 's' : ''}:</b>\n\n`;
     issues.forEach((d, i) => {
       msg += `${i + 1}. 🚨 <b>${d.domain}</b>\n`;
       if (d.category) msg += `   📁 ${d.category}\n`;
+      msg += `   ⚠️ Detected before Google Lookup API — high priority\n`;
       msg += `   🕐 ${new Date(d.scanDate).toLocaleString()}\n\n`;
     });
     msg += `🔗 <a href="${process.env.DASHBOARD_URL || ''}">View Dashboard</a>`;
