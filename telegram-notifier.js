@@ -129,8 +129,9 @@ class TelegramNotifier {
   async notifyBrowserIssues(issues) {
     if (!issues?.length) return null;
     const count = issues.length;
-    let msg = `🌐 <b>BROWSER DETECTION ALERT</b>\n\n`;
-    msg += `<b>Chrome Safe Browsing blocked ${count} domain${count > 1 ? 's' : ''}:</b>\n\n`;
+    let msg = `🔴🔴🔴 <b>DANGEROUS — BROWSER ALERT</b> 🔴🔴🔴\n\n`;
+    msg += `<b>Chrome Safe Browsing blocked ${count} domain${count > 1 ? 's' : ''}:</b>\n`;
+    msg += `<i>Detected before Google Lookup API — treat as high priority</i>\n\n`;
     issues.forEach((d, i) => {
       msg += `${i + 1}. 🚨 <b>${d.domain}</b>\n`;
       if (d.category) msg += `   📁 ${d.category}\n`;
