@@ -296,7 +296,7 @@ class DomainMonitor {
 
       // Log new browser flags
       if (newDangerous.length) {
-        const logRows = newDangerous.map(d => [d.domain, d.category || null, 'browser', null]);
+        const logRows = newDangerous.map(d => [d.domain, d.category || null, 'browser', 'CHROME_BROWSING']);
         const ph = logRows.map((_, i) => `($${i*4+1},$${i*4+2},$${i*4+3},$${i*4+4})`).join(',');
         await db.execute(
           `INSERT INTO flag_logs (domain, category, method, threat_type) VALUES ${ph}`,
