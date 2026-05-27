@@ -142,3 +142,11 @@ process.on('SIGTERM', async () => {
   await monitor.browserChecker.close();
   process.exit(0);
 });
+
+// Prevent Chrome crashes from taking down the whole container
+process.on('uncaughtException', err => {
+  console.error('[server] uncaught exception:', err.message);
+});
+process.on('unhandledRejection', err => {
+  console.error('[server] unhandled rejection:', err?.message || err);
+});
