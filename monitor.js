@@ -314,6 +314,7 @@ class DomainMonitor {
       console.error('❌ Browser scan error:', error.message);
     } finally {
       this.browserScanRunning = false;
+      await this.browserChecker.closeContext();
     }
   }
 }

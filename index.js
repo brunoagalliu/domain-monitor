@@ -115,7 +115,7 @@ app.get('/api/migrate', async (req, res) => {
 });
 
 // Cron: scan every minute
-cron.schedule('* * * * *', async () => {
+cron.schedule('*/2 * * * *', async () => {
   try {
     await monitor.scanDomains();
   } catch (err) {
