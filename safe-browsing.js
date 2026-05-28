@@ -16,10 +16,12 @@ class SafeBrowsingChecker {
       return {};
     }
 
-    // Format domains for the API
-    const threatEntries = domains.map(domain => ({
-      url: domain.startsWith('http') ? domain : `http://${domain}`
-    }));
+    // Check both http:// and https:// — phishing sites are often indexed under
+    // one scheme only, and we don't know which one Google has flagged.
+    const threatEntries = domains.flatMap(domain => {
+      const bare = domain.replace(/^https?:\/\//, '');
+      return [{ url: `http://${bare}` }, { url: `https://${bare}` }];
+    });
 
     const requestBody = {
       client: {
