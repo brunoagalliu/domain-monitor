@@ -104,6 +104,22 @@ const migrations = [
         detected_at TIMESTAMP DEFAULT NOW()
       )
     `
+  },
+  {
+    name: 'Add is_priority to domains',
+    sql: `ALTER TABLE domains ADD COLUMN IF NOT EXISTS is_priority BOOLEAN DEFAULT false`
+  },
+  {
+    name: 'Add scan_suspended to domains',
+    sql: `ALTER TABLE domains ADD COLUMN IF NOT EXISTS scan_suspended BOOLEAN DEFAULT false`
+  },
+  {
+    name: 'Add lookup_flagged to domains',
+    sql: `ALTER TABLE domains ADD COLUMN IF NOT EXISTS lookup_flagged BOOLEAN DEFAULT false`
+  },
+  {
+    name: 'Index: domains(is_priority) partial',
+    sql: `CREATE INDEX IF NOT EXISTS idx_domains_is_priority ON domains (is_priority) WHERE is_active = true AND is_priority = true`
   }
 ];
 

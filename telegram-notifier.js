@@ -126,6 +126,22 @@ class TelegramNotifier {
     return await this.sendMessage(msg);
   }
 
+  async notifySuspendedDomains(domains) {
+    if (!domains?.length) return null;
+    const count = domains.length;
+    let msg = `🔒 <b>SCAN SUSPENDED — ACTION REQUIRED</b>\n\n`;
+    msg += `<b>${count} domain${count > 1 ? 's' : ''} confirmed dangerous by both Chrome and Google Lookup API.</b>\n`;
+    msg += `<i>Automatic scanning has stopped. Manually verify and submit for scan when clean.</i>\n\n`;
+    domains.forEach((d, i) => {
+      msg += `${i + 1}. 🚫 <b>${d.domain}</b>\n`;
+      if (d.category) msg += `   📁 ${d.category}\n`;
+      msg += `\n`;
+    });
+    msg += `🔗 <a href="${process.env.DASHBOARD_URL || ''}">View Dashboard → Submit for Scan</a>`;
+    msg += `\n\n<i>Automated alert from Domain Safety Monitor</i>`;
+    return await this.sendMessage(msg);
+  }
+
   async notifyBrowserIssues(issues) {
     if (!issues?.length) return null;
     const count = issues.length;

@@ -331,6 +331,20 @@
         .btn-remove { padding: 6px 12px; background: #f56565; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; transition: background 0.2s; flex-shrink: 0; }
         .btn-remove:hover { background: #e53e3e; }
 
+        /* Priority star */
+        .btn-priority { background: none; border: none; cursor: pointer; font-size: 18px; padding: 2px 4px; line-height: 1; opacity: 0.4; transition: opacity 0.15s, transform 0.15s; flex-shrink: 0; }
+        .btn-priority:hover { opacity: 1; transform: scale(1.2); }
+        .btn-priority.is-priority { opacity: 1; }
+
+        /* Suspended state */
+        .domain-item.suspended { background: #fffaf0; border-color: #fbd38d; }
+        .domain-item.suspended:hover { background: #fefce8; border-color: #f6ad55; }
+        .badge-suspended { background: #feebc8; color: #7c2d12; border: 1px solid #fbd38d; }
+        .btn-submit-scan { padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; transition: background 0.2s; flex-shrink: 0; white-space: nowrap; }
+        .btn-submit-scan:hover { background: #5a67d8; }
+        .btn-submit-scan:disabled { background: #cbd5e0; cursor: not-allowed; }
+        .status-suspended { background: #ed8936; }
+
         /* Buttons */
         .btn { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
         .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
@@ -408,7 +422,7 @@
             </div>
             <div class="stat-card">
                 <div class="stat-value stat-pending" id="pendingScans">0</div>
-                <div class="stat-label">Pending Scans</div>
+                <div class="stat-label">Suspended / Pending</div>
             </div>
         </div>
 
@@ -596,7 +610,8 @@
                 domains = rawDomains.map(d => {
                     const scan = scans.find(s => s.domain === d.domain);
                     let status = 'unknown';
-                    if (d.is_flagged) status = 'flagged';
+                    if (d.scan_suspended) status = 'suspended';
+                    else if (d.is_flagged) status = 'flagged';
                     else if (d.is_suspicious) status = 'suspicious';
                     else if (scan) status = scan.is_safe ? 'safe' : 'flagged';
                     return { ...d, status, lastScan: scan?.scan_date || null, threats: scan?.threat_types || null };
@@ -619,11 +634,11 @@
                 const res = await fetch(`${API}/stats`, { credentials: 'include' });
                 if (res.ok) {
                     const s = await res.json();
-                    const total = s.total_domains || 0, safe = s.safe_domains || 0, flagged = s.flagged_domains || 0;
+                    const total = s.total_domains || 0, safe = s.safe_domains || 0, flagged = s.flagged_domains || 0, suspended = s.suspended_domains || 0;
                     document.getElementById('totalDomains').textContent = total;
                     document.getElementById('safeDomains').textContent = safe;
                     document.getElementById('flaggedDomains').textContent = flagged;
-                    document.getElementById('pendingScans').textContent = Math.max(0, total - safe - flagged);
+                    document.getElementById('pendingScans').textContent = suspended || Math.max(0, total - safe - flagged);
                     return;
                 }
             } catch {}
@@ -637,23 +652,26 @@
         // ── Flagged alert ─────────────────────────────────────────────
 
         function renderFlaggedAlert() {
+            const suspended = domains
+                .filter(d => d.is_active && d.scan_suspended)
+                .sort((a, b) => (b.lastScan || '').localeCompare(a.lastScan || ''));
             const flagged = domains
-                .filter(d => d.is_active && d.is_flagged)
+                .filter(d => d.is_active && d.is_flagged && !d.scan_suspended)
                 .sort((a, b) => (b.lastScan || '').localeCompare(a.lastScan || ''));
             const suspicious = domains
-                .filter(d => d.is_active && d.is_suspicious && !d.is_flagged)
+                .filter(d => d.is_active && d.is_suspicious && !d.is_flagged && !d.scan_suspended)
                 .sort((a, b) => (b.lastScan || '').localeCompare(a.lastScan || ''));
             const alertEl = document.getElementById('flaggedAlert');
 
-            if (!flagged.length && !suspicious.length) { alertEl.classList.remove('show'); return; }
+            if (!suspended.length && !flagged.length && !suspicious.length) { alertEl.classList.remove('show'); return; }
 
-            const total = flagged.length + suspicious.length;
+            const total = suspended.length + flagged.length + suspicious.length;
             document.getElementById('flaggedAlertTitle').textContent =
                 `${total} Domain${total > 1 ? 's' : ''} Need Attention`;
             document.getElementById('flaggedAlertSubtitle').textContent =
                 `Last updated: ${new Date().toLocaleTimeString()} — click to collapse`;
 
-            const renderCard = (d, isSuspicious) => {
+            const renderCard = (d, type) => {
                 let badges = '';
                 try {
                     const t = JSON.parse(d.threats);
@@ -662,24 +680,27 @@
                 const cat = categories.find(c => c.id === d.category_id);
                 const catLabel = cat ? `<span style="font-size:11px;color:#718096;">📁 ${cat.name}</span>` : '';
                 const scanTime = d.lastScan ? `<span style="font-size:11px;color:#a0aec0;">🕐 ${new Date(d.lastScan).toLocaleString()}</span>` : '';
-                const borderColor = isSuspicious ? '#ed8936' : '#f56565';
-                const label = isSuspicious
-                    ? `<span style="font-size:11px;font-weight:700;color:#7c2d12;background:#feebc8;padding:2px 8px;border-radius:10px;">⚠️ SUSPICIOUS</span>`
-                    : `<span style="font-size:11px;font-weight:700;color:#742a2a;background:#fed7d7;padding:2px 8px;border-radius:10px;">🚨 FLAGGED</span>`;
-                return `<div class="flagged-domain-card" style="border-left-color:${borderColor};">
+                const configs = {
+                    suspended: { color: '#f6ad55', label: `<span style="font-size:11px;font-weight:700;color:#7c2d12;background:#feebc8;padding:2px 8px;border-radius:10px;">⏸ SUSPENDED</span>`, extra: `<div style="font-size:11px;color:#744210;margin-top:4px;">Action required: verify domain is clean, then submit for scan.</div>` },
+                    flagged:   { color: '#f56565', label: `<span style="font-size:11px;font-weight:700;color:#742a2a;background:#fed7d7;padding:2px 8px;border-radius:10px;">🚨 FLAGGED</span>`, extra: '' },
+                    suspicious:{ color: '#ed8936', label: `<span style="font-size:11px;font-weight:700;color:#7c2d12;background:#feebc8;padding:2px 8px;border-radius:10px;">⚠️ SUSPICIOUS</span>`, extra: '' },
+                };
+                const cfg = configs[type];
+                return `<div class="flagged-domain-card" style="border-left-color:${cfg.color};">
                     <div>
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-                            <span class="flagged-domain-name">${d.domain}</span>${label}
+                            <span class="flagged-domain-name">${d.domain}</span>${cfg.label}
                         </div>
                         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">${catLabel}${scanTime}</div>
-                        ${badges}
+                        ${badges}${cfg.extra}
                     </div>
                 </div>`;
             };
 
             document.getElementById('flaggedDomainsList').innerHTML = [
-                ...flagged.map(d => renderCard(d, false)),
-                ...suspicious.map(d => renderCard(d, true))
+                ...suspended.map(d => renderCard(d, 'suspended')),
+                ...flagged.map(d => renderCard(d, 'flagged')),
+                ...suspicious.map(d => renderCard(d, 'suspicious'))
             ].join('');
 
             alertEl.classList.add('show');
@@ -742,7 +763,7 @@
                 list = list.filter(d => d.domain.toLowerCase().includes(q) || (d.notes || '').toLowerCase().includes(q));
             }
 
-            const statusOrder = { flagged: 0, unknown: 1, pending: 2, safe: 3 };
+            const statusOrder = { suspended: 0, flagged: 1, unknown: 2, pending: 3, safe: 4 };
             switch (sortBy) {
                 case 'az': list.sort((a, b) => a.domain.localeCompare(b.domain)); break;
                 case 'za': list.sort((a, b) => b.domain.localeCompare(a.domain)); break;
@@ -818,6 +839,7 @@
             Object.values(groups)
                 .sort((a, b) => a.cat.name.localeCompare(b.cat.name))
                 .forEach(({ cat, items }) => {
+                    const nSuspended = items.filter(d => d.scan_suspended).length;
                     const nFlagged = items.filter(d => d.status === 'flagged').length;
                     const nSafe = items.filter(d => d.status === 'safe').length;
                     const collapsed = collapsedCategories.has(String(cat.id));
@@ -827,6 +849,7 @@
                                 <div class="category-badge" style="background:${cat.color}">
                                     ${cat.name}<span class="category-count">${items.length}</span>
                                 </div>
+                                ${nSuspended ? `<span style="color:#ed8936;font-size:13px;">⏸ ${nSuspended} suspended</span>` : ''}
                                 ${nFlagged ? `<span style="color:#f56565;font-size:13px;">⚠️ ${nFlagged} flagged</span>` : ''}
                                 ${nSafe ? `<span style="color:#48bb78;font-size:13px;">✓ ${nSafe} safe</span>` : ''}
                                 <span class="category-chevron ${collapsed ? 'collapsed' : ''}">▼</span>
@@ -880,24 +903,51 @@
                 browserBadge = `<span class="browser-badge browser-badge-${d.browser_status}" title="Browser check">${icon} ${label}</span>`;
             }
 
+            const isSuspended = d.scan_suspended;
+            const isPriority = d.is_priority;
+            const statusClass = isSuspended ? 'suspended' : (d.status === 'flagged' ? 'flagged' : d.status === 'safe' ? 'safe' : 'unknown');
+            const statusIndicatorClass = isSuspended ? 'status-suspended' : `status-${d.status}`;
+
+            const suspendedInfo = isSuspended
+                ? `<div class="threat-info" style="background:#fffaf0;border-color:#fbd38d;color:#7c2d12;">
+                     ⏸ <b>Scanning suspended</b> — confirmed dangerous by both Chrome and Lookup API.
+                     Manually verify the domain is clean, then click "Submit for Scan" to resume monitoring.
+                   </div>`
+                : '';
+
+            const priorityStar = `<button
+                class="btn-priority ${isPriority ? 'is-priority' : ''}"
+                onclick="togglePriority(${d.id}, ${!isPriority})"
+                title="${isPriority ? 'Priority domain — click to remove from priority queue' : 'Click to add to priority queue (sub-30s browser scan)'}">
+                ${isPriority ? '⭐' : '☆'}
+            </button>`;
+
+            const actionBtns = isSuspended
+                ? `<span class="status-badge badge-suspended">⏸ suspended</span>
+                   <button class="btn-submit-scan" onclick="submitForScan(${d.id}, this)">🔬 Submit for Scan</button>
+                   <button class="btn-remove" onclick="removeDomain(${d.id})">Remove</button>`
+                : `<span class="status-badge badge-${d.status}">${d.status}</span>
+                   <button class="btn-remove" onclick="removeDomain(${d.id})">Remove</button>`;
+
             return `
-                <div class="domain-item ${selected ? 'selected' : ''}" id="item-${d.id}">
+                <div class="domain-item ${selected ? 'selected' : ''} ${isSuspended ? 'suspended' : ''}" id="item-${d.id}">
                     <input type="checkbox" class="domain-checkbox" ${selected ? 'checked' : ''}
                            onchange="toggleSelect(${d.id}, this.checked)">
-                    <div class="status-indicator status-${d.status}"></div>
+                    <div class="status-indicator ${statusIndicatorClass}"></div>
                     <div class="domain-body">
-                        <div class="domain-name">${d.domain}</div>
+                        <div class="domain-name">${d.domain}${isPriority ? ' <span title="Priority domain" style="font-size:13px;">⭐</span>' : ''}</div>
                         <div class="domain-meta-row">
                             ${catBadge}
                             ${browserBadge}
-                            <span class="domain-last-scan">${lastScan}</span>
+                            <span class="domain-last-scan">${isSuspended ? '⏸ suspended' : lastScan}</span>
                         </div>
                         ${d.notes ? `<div class="domain-notes">📝 ${d.notes}</div>` : ''}
                         ${threatInfo}
+                        ${suspendedInfo}
                     </div>
                     <div class="domain-actions">
-                        <span class="status-badge badge-${d.status}">${d.status}</span>
-                        <button class="btn-remove" onclick="removeDomain(${d.id})">Remove</button>
+                        ${priorityStar}
+                        ${actionBtns}
                     </div>
                 </div>`;
         }
@@ -1053,6 +1103,52 @@
             const res = await fetch(`${API}/domains/${id}`, { method: 'DELETE', credentials: 'include' });
             if (res.ok) { showAlert('Domain removed', 'success'); loadDomains(); }
             else showAlert('Failed to remove domain', 'error');
+        }
+
+        // ── Priority toggle ───────────────────────────────────────────
+
+        async function togglePriority(id, isPriority) {
+            const res = await fetch(`${API}/domains/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ is_priority: isPriority })
+            });
+            if (res.ok) {
+                showAlert(isPriority ? '⭐ Domain added to priority queue' : 'Domain removed from priority queue', 'success');
+                loadDomains();
+            } else {
+                showAlert('Failed to update priority', 'error');
+            }
+        }
+
+        // ── Manual scan (for suspended domains) ───────────────────────
+
+        async function submitForScan(id, btn) {
+            if (!confirm('Run a manual scan on this domain? This will check both Google Lookup API and Chrome Safe Browsing.')) return;
+            btn.disabled = true;
+            btn.textContent = '⏳ Scanning…';
+            try {
+                const res = await fetch(`${API}/domains/${id}/scan`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    showAlert(data.error || 'Scan failed', 'error');
+                } else if (data.clean) {
+                    showAlert(`✅ ${data.domain} is clean! Monitoring resumed.`, 'success');
+                } else {
+                    const detail = [
+                        !data.lookupClean ? 'Lookup API: still flagged' : null,
+                        data.browserStatus === 'dangerous' ? 'Browser: still dangerous' : null
+                    ].filter(Boolean).join(' · ');
+                    showAlert(`⚠️ ${data.domain} still flagged — ${detail}. Domain remains suspended.`, 'warning');
+                }
+            } catch (e) {
+                showAlert('Scan request failed: ' + e.message, 'error');
+            }
+            loadDomains();
         }
 
         // ── Scan ──────────────────────────────────────────────────────

@@ -24,6 +24,18 @@ app.all('/api/auth/login', require('./api/auth/login'));
 app.all('/api/auth/logout', require('./api/auth/logout'));
 app.all('/api/auth/verify', require('./api/auth/verify'));
 
+// Manual scan for a suspended domain
+app.post('/api/domains/:id/scan', async (req, res) => {
+  const { requireAuth } = require('./lib/auth');
+  if (!requireAuth(req, res)) return;
+  try {
+    const result = await monitor.manualScanDomain(parseInt(req.params.id));
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // Domain routes
 app.all('/api/domains/:id', (req, res) => {
   req.query.id = req.params.id;
@@ -51,6 +63,8 @@ app.get('/api/browser-status', async (req, res) => {
       COUNT(*) FILTER (WHERE last_browser_check IS NOT NULL)::int AS checked,
       COUNT(*) FILTER (WHERE browser_status = 'safe')::int            AS safe,
       COUNT(*) FILTER (WHERE browser_status = 'dangerous')::int       AS dangerous,
+      COUNT(*) FILTER (WHERE is_priority = true)::int                 AS priority,
+      COUNT(*) FILTER (WHERE scan_suspended = true)::int              AS suspended,
       MAX(last_browser_check)                                          AS last_check
     FROM domains WHERE is_active = true
   `);
@@ -114,7 +128,7 @@ app.get('/api/migrate', async (req, res) => {
   }
 });
 
-// Cron: scan every minute
+// Cron: Lookup API scan every 2 minutes (all non-suspended domains)
 cron.schedule('*/2 * * * *', async () => {
   try {
     await monitor.scanDomains();
@@ -123,8 +137,8 @@ cron.schedule('*/2 * * * *', async () => {
   }
 });
 
-// Cron: browser scan every 2 minutes
-cron.schedule('*/2 * * * *', async () => {
+// Cron: Browser scan every 30 seconds (priority domains only — sub-1-minute detection)
+cron.schedule('*/30 * * * * *', async () => {
   try {
     await monitor.browserScanDomains();
   } catch (err) {
@@ -133,9 +147,10 @@ cron.schedule('*/2 * * * *', async () => {
 });
 
 
-
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`  Lookup API scan: every 2 minutes (all non-suspended domains)`);
+  console.log(`  Browser scan:    every 30 seconds (priority domains only)`);
 });
 
 process.on('SIGTERM', async () => {
