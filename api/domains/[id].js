@@ -11,7 +11,7 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (!requireAuth(req, res)) return;
 
-  const { id } = req.query;
+  const id = req.params?.id || req.query.id;
   if (!id) return res.status(400).json({ error: 'Domain ID is required' });
 
   // PATCH — toggle is_priority (and optionally other boolean fields)
