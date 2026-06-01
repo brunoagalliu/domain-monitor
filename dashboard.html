@@ -53,6 +53,30 @@
         .stat-total { color: #667eea; }
         .stat-pending { color: #ed8936; }
 
+        /* Priority Panel */
+        .priority-panel {
+            background: white;
+            border: 1px solid #c3dafe;
+            border-radius: 16px;
+            padding: 20px 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            display: none;
+        }
+        .priority-panel.show { display: block; animation: slideDown 0.4s ease-out; }
+        .priority-domain-card {
+            background: #ebf4ff;
+            border-left: 4px solid #667eea;
+            border-radius: 8px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .priority-domain-name { font-size: 15px; font-weight: 600; color: #1a365d; }
+        .priority-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
         /* Flagged Alert */
         .flagged-alert {
             background: white;
@@ -426,6 +450,21 @@
             </div>
         </div>
 
+        <!-- Priority Panel -->
+        <div id="priorityPanel" class="priority-panel">
+            <div class="flagged-alert-header" onclick="togglePriorityPanel()">
+                <div class="flagged-alert-icon">⭐</div>
+                <div class="flagged-alert-title">
+                    <h2 id="priorityPanelTitle">Priority Domains</h2>
+                    <p id="priorityPanelSubtitle"></p>
+                </div>
+                <span class="flagged-collapse-icon" id="priorityCollapseIcon">▼</span>
+            </div>
+            <div id="priorityPanelBody">
+                <div class="flagged-domains-list" id="priorityDomainsList"></div>
+            </div>
+        </div>
+
         <!-- Flagged Alert -->
         <div id="flaggedAlert" class="flagged-alert">
             <div class="flagged-alert-header" onclick="toggleFlaggedAlert()">
@@ -563,6 +602,7 @@
         let addMode = 'single';
         let visibleDomainIds = [];
         let flaggedAlertCollapsed = localStorage.getItem('flaggedAlertCollapsed') === 'true';
+        let priorityPanelCollapsed = localStorage.getItem('priorityPanelCollapsed') === 'true';
         let collapsedCategories = new Set(JSON.parse(localStorage.getItem('collapsedCategories') || '[]'));
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -619,6 +659,7 @@
 
                 updateStats();
                 renderCategoryPills();
+                renderPriorityPanel();
                 renderFlaggedAlert();
                 renderDomains();
             } catch (err) {
@@ -647,6 +688,80 @@
             document.getElementById('safeDomains').textContent = active.filter(d => d.status === 'safe').length;
             document.getElementById('flaggedDomains').textContent = active.filter(d => d.status === 'flagged').length;
             document.getElementById('pendingScans').textContent = active.filter(d => d.status === 'unknown').length;
+        }
+
+        // ── Priority panel ────────────────────────────────────────────
+
+        function renderPriorityPanel() {
+            const priority = domains
+                .filter(d => d.is_active && d.is_priority)
+                .sort((a, b) => {
+                    const order = { suspended: 0, flagged: 1, unknown: 2, safe: 3 };
+                    return (order[a.status] ?? 2) - (order[b.status] ?? 2) || a.domain.localeCompare(b.domain);
+                });
+
+            const panel = document.getElementById('priorityPanel');
+            if (!priority.length) { panel.classList.remove('show'); return; }
+
+            const count = priority.length;
+            document.getElementById('priorityPanelTitle').textContent = `Priority Domains (${count})`;
+
+            const dangerous = priority.filter(d => d.status === 'flagged' || d.scan_suspended).length;
+            document.getElementById('priorityPanelSubtitle').textContent =
+                dangerous
+                    ? `${dangerous} flagged — browser scan every 30s · click to collapse`
+                    : `All clear — browser scan every 30s · click to collapse`;
+
+            document.getElementById('priorityDomainsList').innerHTML = priority.map(d => {
+                const cat = categories.find(c => c.id === d.category_id);
+                const catLabel = cat ? `<span style="font-size:11px;color:#4a5568;background:#e8eaf6;padding:2px 8px;border-radius:10px;">📁 ${cat.name}</span>` : '';
+                const lastCheck = d.last_browser_check
+                    ? `<span style="font-size:11px;color:#a0aec0;">🌐 ${new Date(d.last_browser_check).toLocaleTimeString()}</span>`
+                    : `<span style="font-size:11px;color:#a0aec0;">🌐 not yet checked</span>`;
+
+                const dotColors = { safe: '#48bb78', flagged: '#f56565', suspended: '#ed8936', unknown: '#a0aec0' };
+                const dotColor = dotColors[d.status] || '#a0aec0';
+
+                const statusLabel = d.scan_suspended
+                    ? `<span style="font-size:11px;font-weight:700;color:#7c2d12;background:#feebc8;padding:2px 8px;border-radius:10px;">⏸ SUSPENDED</span>`
+                    : d.status === 'flagged'
+                        ? `<span style="font-size:11px;font-weight:700;color:#742a2a;background:#fed7d7;padding:2px 8px;border-radius:10px;">🚨 FLAGGED</span>`
+                        : d.status === 'safe'
+                            ? `<span style="font-size:11px;font-weight:600;color:#22543d;background:#c6f6d5;padding:2px 8px;border-radius:10px;">✓ SAFE</span>`
+                            : `<span style="font-size:11px;font-weight:600;color:#4a5568;background:#e2e8f0;padding:2px 8px;border-radius:10px;">— PENDING</span>`;
+
+                const removeBtn = `<button onclick="togglePriority(${d.id}, false)" title="Remove from priority" style="background:none;border:none;cursor:pointer;font-size:13px;color:#a0aec0;padding:4px 6px;border-radius:6px;white-space:nowrap;" onmouseover="this.style.color='#4a5568'" onmouseout="this.style.color='#a0aec0'">☆ Remove</button>`;
+
+                return `<div class="priority-domain-card">
+                    <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+                        <div class="priority-status-dot" style="background:${dotColor};${d.status === 'flagged' ? 'box-shadow:0 0 0 3px rgba(245,101,101,0.3);' : d.status === 'safe' ? 'box-shadow:0 0 0 3px rgba(72,187,120,0.3);' : ''}"></div>
+                        <div style="min-width:0;">
+                            <div class="priority-domain-name">${d.domain}</div>
+                            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+                                ${catLabel}${lastCheck}${statusLabel}
+                            </div>
+                        </div>
+                    </div>
+                    ${removeBtn}
+                </div>`;
+            }).join('');
+
+            panel.classList.add('show');
+            applyPriorityPanelCollapse();
+        }
+
+        function togglePriorityPanel() {
+            priorityPanelCollapsed = !priorityPanelCollapsed;
+            localStorage.setItem('priorityPanelCollapsed', priorityPanelCollapsed);
+            applyPriorityPanelCollapse();
+        }
+
+        function applyPriorityPanelCollapse() {
+            const body = document.getElementById('priorityPanelBody');
+            const icon = document.getElementById('priorityCollapseIcon');
+            if (!body || !icon) return;
+            body.style.display = priorityPanelCollapsed ? 'none' : 'block';
+            icon.classList.toggle('collapsed', priorityPanelCollapsed);
         }
 
         // ── Flagged alert ─────────────────────────────────────────────
