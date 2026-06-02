@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../lib/api';
 import PublishToRTModal from '../components/PublishToRTModal';
 
@@ -26,7 +26,7 @@ function ThreatBadges({ raw, isSuspicious, detectionMethod }) {
   }
   if (threats.length === 0 && methods.length === 0 && !isSuspicious) return <span className="text-gray-300 text-xs">—</span>;
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-wrap gap-1">
       {methods.map(m => (
         <span key={m} className="inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500">
           {METHOD_LABEL[m] ?? m}
@@ -213,13 +213,13 @@ function LandersSubRow({ domain, allLanders, onChanged }) {
   }
 
   if (landers === null) {
-    return <tr><td colSpan={10} className="px-8 py-2 bg-gray-50 text-xs text-gray-400">Loading landers…</td></tr>;
+    return <tr><td colSpan={9} className="px-8 py-2 bg-gray-50 text-xs text-gray-400">Loading landers…</td></tr>;
   }
 
   return (
     <>
       <tr>
-        <td colSpan={10} className="px-0 py-0 bg-gray-50 border-b border-gray-200">
+        <td colSpan={9} className="px-0 py-0 bg-gray-50 border-b border-gray-200">
           <div className="px-8 py-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Landers</span>
@@ -324,16 +324,22 @@ function LandersSubRow({ domain, allLanders, onChanged }) {
 }
 
 const TABS = ['all', 'active', 'standby', 'banned'];
+const PER_PAGE_OPTIONS = [25, 50, 100];
 
 export default function DomainsPage() {
   const [domains,   setDomains]   = useState([]);
   const [landers,   setLanders]   = useState([]);
   const [filter,    setFilter]    = useState('all');
+  const [search,    setSearch]    = useState('');
   const [modal,     setModal]     = useState(null);
   const [loading,   setLoading]   = useState(true);
   const [rotating,  setRotating]  = useState(false);
   const [deploying, setDeploying] = useState(null);
   const [expanded,  setExpanded]  = useState(new Set());
+  const [page,      setPage]      = useState(0);
+  const [perPage,   setPerPage]   = useState(25);
+  const [sortKey,   setSortKey]   = useState('domain');
+  const [sortDir,   setSortDir]   = useState('asc');
 
   const load = useCallback(async () => {
     try {
@@ -355,8 +361,42 @@ export default function DomainsPage() {
     });
   }
 
-  const counts   = domains.reduce((acc, d) => { acc[d.status] = (acc[d.status] || 0) + 1; return acc; }, {});
-  const filtered = filter === 'all' ? domains : domains.filter(d => d.status === filter);
+  function handleSort(key) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  }
+
+  const counts = domains.reduce((acc, d) => { acc[d.status] = (acc[d.status] || 0) + 1; return acc; }, {});
+
+  const filtered = useMemo(() => {
+    let list = filter === 'all' ? domains : domains.filter(d => d.status === filter);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(d =>
+        d.domain.toLowerCase().includes(q) ||
+        (d.funnel_name || '').toLowerCase().includes(q) ||
+        (d.lander_name || '').toLowerCase().includes(q)
+      );
+    }
+    list = [...list].sort((a, b) => {
+      let av = a[sortKey] ?? '';
+      let bv = b[sortKey] ?? '';
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      if (av < bv) return sortDir === 'asc' ? -1 : 1;
+      if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return list;
+  }, [domains, filter, search, sortKey, sortDir]);
+
+  const totalPages = Math.ceil(filtered.length / perPage);
+  const paginated  = filtered.slice(page * perPage, (page + 1) * perPage);
+
+  function resetPage() { setPage(0); }
+  function handleFilterChange(t) { setFilter(t); resetPage(); }
+  function handleSearchChange(e) { setSearch(e.target.value); resetPage(); }
+  function handlePerPageChange(e) { setPerPage(Number(e.target.value)); resetPage(); }
 
   async function handleDelete(id, domain) {
     if (!confirm(`Remove "${domain}" from the pool?`)) return;
@@ -390,9 +430,25 @@ export default function DomainsPage() {
     finally { setRotating(false); }
   }
 
+  function SortTh({ label, colKey, className = '' }) {
+    const active = sortKey === colKey;
+    return (
+      <th onClick={() => handleSort(colKey)}
+        className={`text-left px-3 py-2.5 font-medium text-gray-600 cursor-pointer select-none hover:text-gray-900 whitespace-nowrap ${className}`}>
+        {label}
+        <span className="ml-1 text-gray-300">
+          {active ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+        </span>
+      </th>
+    );
+  }
+
+  const start = page * perPage + 1;
+  const end   = Math.min((page + 1) * perPage, filtered.length);
+
   return (
     <div className="p-6 max-w-7xl">
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex items-start justify-between mb-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Domain Pool</h1>
           <div className="flex gap-4 mt-1 text-sm">
@@ -407,85 +463,125 @@ export default function DomainsPage() {
         </button>
       </div>
 
-      <div className="flex gap-1 mb-4">
-        {TABS.map(t => (
-          <button key={t} onClick={() => setFilter(t)}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium capitalize transition-colors ${
-              filter === t ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'
-            }`}>
-            {t} ({t === 'all' ? domains.length : counts[t] || 0})
-          </button>
-        ))}
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        {/* Status tabs */}
+        <div className="flex gap-1">
+          {TABS.map(t => (
+            <button key={t} onClick={() => handleFilterChange(t)}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium capitalize transition-colors ${
+                filter === t
+                  ? 'bg-indigo-600 text-white'
+                  : t === 'banned' && (counts.banned || 0) > 0
+                    ? 'text-red-600 hover:bg-red-50'
+                    : 'text-gray-600 hover:bg-gray-100'
+              }`}>
+              {t} ({t === 'all' ? domains.length : counts[t] || 0})
+            </button>
+          ))}
+        </div>
+
+        {/* Search */}
+        <div className="relative flex-1 min-w-48 max-w-xs">
+          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input value={search} onChange={handleSearchChange}
+            placeholder="Search domains, funnels…"
+            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          {search && (
+            <button onClick={() => { setSearch(''); resetPage(); }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">×</button>
+          )}
+        </div>
+
+        {/* Per-page selector */}
+        <div className="ml-auto flex items-center gap-2 text-sm text-gray-500">
+          <span>Show</span>
+          <select value={perPage} onChange={handlePerPageChange}
+            className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            {PER_PAGE_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
       </div>
 
+      {/* Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th className="w-6 px-4 py-3"></th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Domain</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Threats</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Lander</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Priority</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Added</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Actions</th>
+              <th className="w-8 px-3 py-2.5"></th>
+              <SortTh label="Domain"   colKey="domain"      />
+              <SortTh label="Status"   colKey="status"      />
+              <th className="text-left px-3 py-2.5 font-medium text-gray-600">Threats</th>
+              <SortTh label="Funnel"   colKey="funnel_name" />
+              <SortTh label="Lander"   colKey="lander_name" />
+              <SortTh label="Priority" colKey="priority"    />
+              <SortTh label="Added"    colKey="added_at"    />
+              <th className="text-left px-3 py-2.5 font-medium text-gray-600">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
-              <tr><td colSpan={8} className="text-center py-10 text-gray-400">Loading...</td></tr>
-            ) : filtered.length === 0 ? (
-              <tr><td colSpan={8} className="text-center py-10 text-gray-400">No domains found</td></tr>
-            ) : filtered.map(d => (
+              <tr><td colSpan={9} className="text-center py-10 text-gray-400">Loading...</td></tr>
+            ) : paginated.length === 0 ? (
+              <tr><td colSpan={9} className="text-center py-10 text-gray-400">
+                {search ? `No domains match "${search}"` : 'No domains found'}
+              </td></tr>
+            ) : paginated.map(d => (
               <>
-                <tr key={d.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3">
+                <tr key={d.id} className={`hover:bg-gray-50 transition-colors ${d.status === 'banned' ? 'opacity-60' : ''}`}>
+                  <td className="px-3 py-2">
                     <button onClick={() => toggleExpanded(d.id)}
                       className="text-gray-400 hover:text-gray-600 transition-colors"
                       title={expanded.has(d.id) ? 'Collapse' : 'Expand landers'}>
-                      <svg className={`w-4 h-4 transition-transform ${expanded.has(d.id) ? 'rotate-90' : ''}`}
+                      <svg className={`w-3.5 h-3.5 transition-transform ${expanded.has(d.id) ? 'rotate-90' : ''}`}
                         fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                     </button>
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs text-gray-800">{d.domain}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2 font-mono text-xs text-gray-800">{d.domain}</td>
+                  <td className="px-3 py-2">
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[d.status]}`}>{d.status}</span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2">
                     <ThreatBadges raw={d.threat_types} isSuspicious={d.is_suspicious} detectionMethod={d.detection_method} />
                   </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{d.lander_name || '—'}</td>
-                  <td className="px-4 py-3 text-gray-500">{d.priority}</td>
-                  <td className="px-4 py-3 text-gray-400 text-xs">
+                  <td className="px-3 py-2 text-xs text-gray-500 max-w-32 truncate" title={d.funnel_name || ''}>
+                    {d.funnel_name || <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-3 py-2 text-xs text-gray-500 max-w-28 truncate" title={d.lander_name || ''}>
+                    {d.lander_name || <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-3 py-2 text-xs text-gray-400 text-center">{d.priority ?? 0}</td>
+                  <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">
                     {d.added_at ? new Date(d.added_at).toLocaleDateString() : '—'}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2 flex-wrap">
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       {d.lander_name && (
                         <button onClick={() => handleDeploy(d.id, d.domain)} disabled={deploying === d.id}
-                          className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50 transition-colors">
+                          className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50 transition-colors">
                           {deploying === d.id ? 'Deploying...' : 'Deploy'}
                         </button>
                       )}
                       {d.status === 'active' && (
                         <button onClick={() => handleRotateNow(d.domain)} disabled={rotating}
-                          className="text-xs px-2 py-1 bg-orange-100 text-orange-700 rounded hover:bg-orange-200 disabled:opacity-50 transition-colors">
-                          Rotate Now
+                          className="text-xs px-2 py-0.5 bg-orange-100 text-orange-700 rounded hover:bg-orange-200 disabled:opacity-50 transition-colors">
+                          Rotate
                         </button>
                       )}
                       {d.status === 'banned' && (
                         <button onClick={() => handleRestore(d.id)}
-                          className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors">
+                          className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors">
                           Restore
                         </button>
                       )}
                       <button onClick={() => setModal(d)}
-                        className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors">Edit</button>
+                        className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors">Edit</button>
                       <button onClick={() => handleDelete(d.id, d.domain)}
-                        className="text-xs px-2 py-1 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors">Delete</button>
+                        className="text-xs px-2 py-0.5 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors">Del</button>
                     </div>
                   </td>
                 </tr>
@@ -496,6 +592,32 @@ export default function DomainsPage() {
             ))}
           </tbody>
         </table>
+
+        {/* Pagination footer */}
+        {filtered.length > 0 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50 text-sm text-gray-500">
+            <span>{start}–{end} of {filtered.length}</span>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPage(0)} disabled={page === 0}
+                className="px-2 py-1 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-xs">«</button>
+              <button onClick={() => setPage(p => p - 1)} disabled={page === 0}
+                className="px-2 py-1 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-xs">‹</button>
+              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                const p = totalPages <= 7 ? i : Math.max(0, Math.min(page - 3, totalPages - 7)) + i;
+                return (
+                  <button key={p} onClick={() => setPage(p)}
+                    className={`px-2.5 py-1 rounded text-xs transition-colors ${p === page ? 'bg-indigo-600 text-white' : 'hover:bg-gray-200'}`}>
+                    {p + 1}
+                  </button>
+                );
+              })}
+              <button onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1}
+                className="px-2 py-1 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-xs">›</button>
+              <button onClick={() => setPage(totalPages - 1)} disabled={page >= totalPages - 1}
+                className="px-2 py-1 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-xs">»</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {modal && (
