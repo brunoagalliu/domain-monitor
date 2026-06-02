@@ -637,7 +637,7 @@ export default function DomainsPage() {
                           {deploying === d.id ? 'Deploying...' : 'Deploy'}
                         </button>
                       )}
-                      {d.status === 'active' && (
+                      {(d.status === 'active' || d.status === 'standby') && (
                         <button onClick={() => handleRotateNow(d.domain)} disabled={rotating}
                           className="text-xs px-2 py-0.5 bg-orange-100 text-orange-700 rounded hover:bg-orange-200 disabled:opacity-50 transition-colors">
                           Rotate
