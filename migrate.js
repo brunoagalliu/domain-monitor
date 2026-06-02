@@ -120,6 +120,55 @@ const migrations = [
   {
     name: 'Index: domains(is_priority) partial',
     sql: `CREATE INDEX IF NOT EXISTS idx_domains_is_priority ON domains (is_priority) WHERE is_active = true AND is_priority = true`
+  },
+  // ── Rotator merge columns ──────────────────────────────────────────────────
+  {
+    name: 'Add redtrack_lander_id to domains',
+    sql: `ALTER TABLE domains ADD COLUMN IF NOT EXISTS redtrack_lander_id TEXT`
+  },
+  {
+    name: 'Add banned_at to domains',
+    sql: `ALTER TABLE domains ADD COLUMN IF NOT EXISTS banned_at TIMESTAMP`
+  },
+  {
+    name: 'Add from_domain to rotation_history',
+    sql: `ALTER TABLE rotation_history ADD COLUMN IF NOT EXISTS from_domain TEXT`
+  },
+  {
+    name: 'Add to_domain to rotation_history',
+    sql: `ALTER TABLE rotation_history ADD COLUMN IF NOT EXISTS to_domain TEXT`
+  },
+  {
+    name: 'Add lander_name to rotation_history',
+    sql: `ALTER TABLE rotation_history ADD COLUMN IF NOT EXISTS lander_name TEXT`
+  },
+  {
+    name: 'Add trigger_source to rotation_history',
+    sql: `ALTER TABLE rotation_history ADD COLUMN IF NOT EXISTS trigger_source TEXT DEFAULT 'auto'`
+  },
+  {
+    name: 'Add error to rotation_history',
+    sql: `ALTER TABLE rotation_history ADD COLUMN IF NOT EXISTS error TEXT`
+  },
+  {
+    name: 'Add redtrack_offer_id to funnel_offers',
+    sql: `ALTER TABLE funnel_offers ADD COLUMN IF NOT EXISTS redtrack_offer_id TEXT`
+  },
+  {
+    name: 'Add offer_title to funnel_offers',
+    sql: `ALTER TABLE funnel_offers ADD COLUMN IF NOT EXISTS offer_title TEXT`
+  },
+  {
+    name: 'Add subdirectory to domain_landers',
+    sql: `ALTER TABLE domain_landers ADD COLUMN IF NOT EXISTS subdirectory TEXT DEFAULT ''`
+  },
+  {
+    name: 'Add redtrack_lander_title to domain_landers',
+    sql: `ALTER TABLE domain_landers ADD COLUMN IF NOT EXISTS redtrack_lander_title TEXT`
+  },
+  {
+    name: 'Unique index on funnels.redtrack_stream_id',
+    sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_funnels_redtrack_stream_id ON funnels (redtrack_stream_id) WHERE redtrack_stream_id IS NOT NULL`
   }
 ];
 

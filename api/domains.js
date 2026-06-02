@@ -18,16 +18,30 @@ module.exports = async (req, res) => {
 
   try {
     if (req.method === 'GET') {
-      // Get all domains
       const [domains] = await db.execute(
-        `SELECT d.*, c.name as category_name, c.color as category_color 
-         FROM domains d 
-         LEFT JOIN categories c ON d.category_id = c.id 
-         WHERE d.is_active = true 
-         ORDER BY c.name, d.domain`
+        `SELECT d.*,
+           d.rotator_status  AS status,
+           d.rotator_priority AS priority,
+           d.created_at       AS added_at,
+           c.name  AS category_name,
+           c.color AS category_color,
+           l.name  AS lander_name,
+           f.name  AS funnel_name
+         FROM domains d
+         LEFT JOIN categories   c ON d.category_id = c.id
+         LEFT JOIN landers      l ON d.lander_id   = l.id
+         LEFT JOIN funnels      f ON d.funnel_id   = f.id
+         WHERE d.is_active = true
+         ORDER BY
+           CASE WHEN d.rotator_status = 'active'  THEN 0
+                WHEN d.rotator_status = 'standby' THEN 1
+                ELSE 2 END,
+           d.rotator_priority DESC,
+           c.name,
+           d.domain`
       );
       return res.status(200).json(domains);
-    } 
+    }
     
     if (req.method === 'POST') {
       // Add domain

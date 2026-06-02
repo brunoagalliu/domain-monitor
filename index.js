@@ -9,20 +9,30 @@ const PORT = process.env.PORT || 3000;
 const monitor = new DomainMonitor();
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname)));
 
-// Static pages
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')));
-app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'login.html')));
-app.get('/login.html', (req, res) => res.sendFile(path.join(__dirname, 'login.html')));
-app.get('/categories', (req, res) => res.sendFile(path.join(__dirname, 'categories.html')));
-app.get('/logs', (req, res) => res.sendFile(path.join(__dirname, 'logs.html')));
-app.get('/logs.html', (req, res) => res.sendFile(path.join(__dirname, 'logs.html')));
-
-// Auth routes
+// Auth routes (public)
 app.all('/api/auth/login', require('./api/auth/login'));
 app.all('/api/auth/logout', require('./api/auth/logout'));
 app.all('/api/auth/verify', require('./api/auth/verify'));
+
+// ── Rotator API routes ─────────────────────────────────────────────────────────
+app.use('/api/funnels', require('./api/funnels'));
+app.use('/api/landers', require('./api/landers'));
+app.use('/api/rotate', require('./api/rotate'));
+app.use('/api/history', require('./api/rotation-history'));
+app.use('/api/redtrack', require('./api/redtrack').router);
+
+// Domain-landers sub-routes (MUST be before the /api/domains/:id catch-all)
+app.use('/api/domains/:id/landers', require('./api/domains/landers'));
+
+// Domain deploy sub-route
+app.post('/api/domains/:id/deploy', async (req, res) => {
+  const { requireAuth } = require('./lib/auth');
+  if (!requireAuth(req, res)) return;
+  req.query.id = req.params.id;
+  req.path = '/deploy';
+  return require('./api/domains/[id]')(req, res);
+});
 
 // Manual scan for a suspended domain
 app.post('/api/domains/:id/scan', async (req, res) => {
@@ -55,7 +65,7 @@ app.all('/api/categories/:id', (req, res) => {
 });
 app.all('/api/categories', require('./api/categories'));
 
-// Browser scanner health check
+// Browser scanner status
 app.get('/api/browser-status', async (req, res) => {
   const { execute } = require('./db');
   const [rows] = await execute(`
@@ -73,6 +83,15 @@ app.get('/api/browser-status', async (req, res) => {
     browserReady: !!monitor.browserChecker.context,
     lastError: monitor.browserChecker.lastError || null,
     ...rows[0],
+  });
+});
+
+// Monitor status (for sidebar badge)
+app.get('/api/monitor/status', (req, res) => {
+  res.json({
+    running: monitor.browserScanRunning || false,
+    configured: true,
+    lastError: monitor.browserChecker?.lastError || null,
   });
 });
 
@@ -117,7 +136,7 @@ app.get('/api/test-detection', async (req, res) => {
   res.json({ domain, totalMs: ts(), results: log });
 });
 
-// One-time migration route (remove after first use)
+// One-time migration route
 app.get('/api/migrate', async (req, res) => {
   try {
     const { runMigration } = require('./migrate');
@@ -128,7 +147,7 @@ app.get('/api/migrate', async (req, res) => {
   }
 });
 
-// One-time data migration from domain-rotator (remove after first use)
+// One-time data migration from domain-rotator
 app.get('/api/migrate-rotator', async (req, res) => {
   if (!process.env.ROTATOR_DATABASE_URL) {
     return res.status(400).json({ error: 'ROTATOR_DATABASE_URL not set' });
@@ -141,6 +160,25 @@ app.get('/api/migrate-rotator', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── React SPA ──────────────────────────────────────────────────────────────────
+const clientDist = path.join(__dirname, 'client/dist');
+const fs = require('fs');
+if (fs.existsSync(clientDist)) {
+  app.use(express.static(clientDist));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+} else {
+  // Fallback: serve old static HTML files during development
+  app.use(express.static(path.join(__dirname)));
+  app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')));
+  app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'login.html')));
+  app.get('/login.html', (req, res) => res.sendFile(path.join(__dirname, 'login.html')));
+  app.get('/categories', (req, res) => res.sendFile(path.join(__dirname, 'categories.html')));
+  app.get('/logs', (req, res) => res.sendFile(path.join(__dirname, 'logs.html')));
+  app.get('/logs.html', (req, res) => res.sendFile(path.join(__dirname, 'logs.html')));
+}
 
 // Cron: Lookup API scan every 2 minutes (all non-suspended domains)
 cron.schedule('*/2 * * * *', async () => {
