@@ -471,6 +471,74 @@ function OffersCard({ offers }) {
   );
 }
 
+function LanderPoolSection({ funnel, id, showAddDomain, setShowAddDomain, onRotate, onDelete, onRefresh }) {
+  const active  = funnel.domains.filter(d => d.status !== 'banned');
+  const banned  = funnel.domains.filter(d => d.status === 'banned');
+  const [showBanned, setShowBanned] = useState(false);
+
+  return (
+    <section className="bg-white rounded-lg border border-gray-200 p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-700">Lander Pool</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Backup landers ready to rotate in. Deploy + Publish to RT to make a domain rotation-ready.</p>
+        </div>
+        {!showAddDomain && (
+          <button onClick={() => setShowAddDomain(true)}
+            className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors">
+            + Add Lander
+          </button>
+        )}
+      </div>
+
+      {funnel.domains.length === 0 && !showAddDomain && (
+        <p className="text-sm text-gray-400 text-center py-4">No domains yet. Add one to get started.</p>
+      )}
+
+      {active.length > 0 && (
+        <div className="space-y-2 mb-3">
+          {active.map(d => (
+            <DomainRow key={d.id} domain={d} onRotate={onRotate} onDelete={onDelete} onRefresh={onRefresh} />
+          ))}
+        </div>
+      )}
+
+      {banned.length > 0 && (
+        <div className="border border-red-100 rounded-lg overflow-hidden">
+          <button
+            onClick={() => setShowBanned(s => !s)}
+            className="w-full flex items-center justify-between px-4 py-2.5 bg-red-50 hover:bg-red-100 transition-colors text-left">
+            <span className="text-xs font-semibold text-red-600">{banned.length} Banned domain{banned.length > 1 ? 's' : ''}</span>
+            <svg className={`w-3.5 h-3.5 text-red-400 transition-transform ${showBanned ? 'rotate-180' : ''}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {showBanned && (
+            <div className="divide-y divide-red-50">
+              {banned.map(d => (
+                <div key={d.id} className="px-4 py-1">
+                  <DomainRow domain={d} onRotate={onRotate} onDelete={onDelete} onRefresh={onRefresh} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {showAddDomain && (
+        <AddLanderPicker
+          funnelId={Number(id)}
+          streamId={funnel.redtrack_stream_id}
+          funnelDomains={funnel.domains}
+          onSave={() => { setShowAddDomain(false); onRefresh(); }}
+          onCancel={() => setShowAddDomain(false)}
+        />
+      )}
+    </section>
+  );
+}
+
 export default function FunnelDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -504,8 +572,8 @@ export default function FunnelDetailPage() {
   useEffect(() => { load(); }, [load]);
 
   async function deleteDomain(domainId, domain) {
-    if (!confirm(`Remove "${domain}" from this funnel?`)) return;
-    await api.delete(`/domains/${domainId}`);
+    if (!confirm(`Remove "${domain}" from this funnel? The domain stays in your pool (status: standby).`)) return;
+    await api.patch(`/domains/${domainId}`, { funnel_id: null, status: 'standby' });
     load();
   }
 
@@ -615,38 +683,15 @@ export default function FunnelDetailPage() {
         </div>
       )}
 
-      <section className="bg-white rounded-lg border border-gray-200 p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-sm font-semibold text-gray-700">Lander Pool</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Backup landers ready to rotate in. Deploy + Publish to RT to make a domain rotation-ready.</p>
-          </div>
-          {!showAddDomain && (
-            <button onClick={() => setShowAddDomain(true)}
-              className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors">
-              + Add Lander
-            </button>
-          )}
-        </div>
-        {funnel.domains.length === 0 && !showAddDomain ? (
-          <p className="text-sm text-gray-400 text-center py-4">No domains yet. Add one to get started.</p>
-        ) : (
-          <div className="space-y-2">
-            {funnel.domains.map(d => (
-              <DomainRow key={d.id} domain={d} onRotate={handleRotateNow} onDelete={deleteDomain} onRefresh={load} />
-            ))}
-          </div>
-        )}
-        {showAddDomain && (
-          <AddLanderPicker
-            funnelId={Number(id)}
-            streamId={funnel.redtrack_stream_id}
-            funnelDomains={funnel.domains}
-            onSave={() => { setShowAddDomain(false); load(); }}
-            onCancel={() => setShowAddDomain(false)}
-          />
-        )}
-      </section>
+      <LanderPoolSection
+        funnel={funnel}
+        id={id}
+        showAddDomain={showAddDomain}
+        setShowAddDomain={setShowAddDomain}
+        onRotate={handleRotateNow}
+        onDelete={deleteDomain}
+        onRefresh={load}
+      />
     </div>
   );
 }
