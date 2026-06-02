@@ -169,6 +169,10 @@ const migrations = [
   {
     name: 'Unique index on funnels.redtrack_stream_id',
     sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_funnels_redtrack_stream_id ON funnels (redtrack_stream_id) WHERE redtrack_stream_id IS NOT NULL`
+  },
+  {
+    name: 'Add domain_type to domains',
+    sql: `ALTER TABLE domains ADD COLUMN IF NOT EXISTS domain_type VARCHAR(20) DEFAULT NULL CHECK (domain_type IN ('brand', 'non-brand'))`
   }
 ];
 

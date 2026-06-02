@@ -59,15 +59,30 @@ function Modal({ title, onClose, children }) {
   );
 }
 
+const TYPE_COLORS = {
+  brand:       'bg-blue-100 text-blue-700',
+  'non-brand': 'bg-violet-100 text-violet-700',
+};
+
+function TypeBadge({ type }) {
+  if (!type) return null;
+  return (
+    <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${TYPE_COLORS[type] || 'bg-gray-100 text-gray-500'}`}>
+      {type}
+    </span>
+  );
+}
+
 function DomainForm({ initial = {}, landers, onSave, onClose }) {
   const isEdit = !!initial.id;
   const [form, setForm] = useState({
-    domain:    initial.domain    || '',
-    doc_root:  initial.doc_root  || '',
-    status:    initial.status    || 'standby',
-    lander_id: initial.lander_id || '',
-    priority:  initial.priority  ?? 0,
-    notes:     initial.notes     || '',
+    domain:      initial.domain      || '',
+    doc_root:    initial.doc_root    || '',
+    status:      initial.status      || 'standby',
+    domain_type: initial.domain_type || '',
+    lander_id:   initial.lander_id   || '',
+    priority:    initial.priority    ?? 0,
+    notes:       initial.notes       || '',
   });
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
@@ -84,7 +99,7 @@ function DomainForm({ initial = {}, landers, onSave, onClose }) {
     e.preventDefault();
     setSaving(true); setError('');
     try {
-      const body = { ...form, lander_id: form.lander_id ? Number(form.lander_id) : null, priority: Number(form.priority) };
+      const body = { ...form, lander_id: form.lander_id ? Number(form.lander_id) : null, priority: Number(form.priority), domain_type: form.domain_type || null };
       if (isEdit) await api.patch(`/domains/${initial.id}`, body);
       else await api.post('/domains', body);
       onSave();
@@ -109,6 +124,24 @@ function DomainForm({ initial = {}, landers, onSave, onClose }) {
             <option value="active">Active</option>
             <option value="banned">Banned</option>
           </select>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-gray-700 mb-1">Domain Type</label>
+        <div className="flex gap-2">
+          {[['', 'Uncategorized'], ['brand', 'Brand'], ['non-brand', 'Non-Brand']].map(([val, label]) => (
+            <button key={val} type="button" onClick={() => set('domain_type', val)}
+              className={`flex-1 py-2 text-xs font-medium rounded-md border transition-colors ${
+                form.domain_type === val
+                  ? val === 'brand'     ? 'bg-blue-600 text-white border-blue-600'
+                  : val === 'non-brand' ? 'bg-violet-600 text-white border-violet-600'
+                  : 'bg-gray-700 text-white border-gray-700'
+                  : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+              }`}>
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -395,16 +428,23 @@ function LandersSubRow({ domain, allLanders, onChanged }) {
   );
 }
 
-const TABS = ['all', 'active', 'standby', 'banned'];
+const STATUS_TABS = ['all', 'active', 'standby', 'banned'];
+const TYPE_TABS   = [
+  { key: 'all',        label: 'All types' },
+  { key: 'brand',      label: 'Brand' },
+  { key: 'non-brand',  label: 'Non-Brand' },
+  { key: 'none',       label: 'Uncategorized' },
+];
 const PER_PAGE_OPTIONS = [25, 50, 100];
 
 export default function DomainsPage() {
   const navigate = useNavigate();
   const [domains,   setDomains]   = useState([]);
   const [landers,   setLanders]   = useState([]);
-  const [filter,    setFilter]    = useState('all');
-  const [search,    setSearch]    = useState('');
-  const [modal,     setModal]     = useState(null);
+  const [filter,     setFilter]     = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [search,     setSearch]     = useState('');
+  const [modal,      setModal]      = useState(null);
   const [loading,   setLoading]   = useState(true);
   const [rotating,  setRotating]  = useState(false);
   const [deploying, setDeploying] = useState(null);
@@ -439,10 +479,18 @@ export default function DomainsPage() {
     else { setSortKey(key); setSortDir('asc'); }
   }
 
-  const counts = domains.reduce((acc, d) => { acc[d.status] = (acc[d.status] || 0) + 1; return acc; }, {});
+  const counts     = domains.reduce((acc, d) => { acc[d.status] = (acc[d.status] || 0) + 1; return acc; }, {});
+  const typeCounts = domains.reduce((acc, d) => {
+    const k = d.domain_type || 'none';
+    acc[k] = (acc[k] || 0) + 1;
+    return acc;
+  }, {});
 
   const filtered = useMemo(() => {
     let list = filter === 'all' ? domains : domains.filter(d => d.status === filter);
+    if (typeFilter !== 'all') {
+      list = list.filter(d => typeFilter === 'none' ? !d.domain_type : d.domain_type === typeFilter);
+    }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(d =>
@@ -467,9 +515,10 @@ export default function DomainsPage() {
   const paginated  = filtered.slice(page * perPage, (page + 1) * perPage);
 
   function resetPage() { setPage(0); }
-  function handleFilterChange(t) { setFilter(t); resetPage(); }
-  function handleSearchChange(e) { setSearch(e.target.value); resetPage(); }
-  function handlePerPageChange(e) { setPerPage(Number(e.target.value)); resetPage(); }
+  function handleFilterChange(t)     { setFilter(t); resetPage(); }
+  function handleTypeFilterChange(t) { setTypeFilter(t); resetPage(); }
+  function handleSearchChange(e)     { setSearch(e.target.value); resetPage(); }
+  function handlePerPageChange(e)    { setPerPage(Number(e.target.value)); resetPage(); }
 
   async function handleDelete(id, domain) {
     if (!confirm(`Remove "${domain}" from the pool?`)) return;
@@ -538,9 +587,30 @@ export default function DomainsPage() {
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
+        {/* Type pills */}
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+          {TYPE_TABS.map(({ key, label }) => {
+            const count = key === 'all' ? domains.length : (typeCounts[key] || 0);
+            const active = typeFilter === key;
+            return (
+              <button key={key} onClick={() => handleTypeFilterChange(key)}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                  active
+                    ? key === 'brand'     ? 'bg-blue-600 text-white shadow-sm'
+                    : key === 'non-brand' ? 'bg-violet-600 text-white shadow-sm'
+                    : key === 'none'      ? 'bg-gray-700 text-white shadow-sm'
+                    : 'bg-white text-gray-800 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}>
+                {label} <span className="ml-0.5 opacity-70">({count})</span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* Status tabs */}
         <div className="flex gap-1">
-          {TABS.map(t => (
+          {STATUS_TABS.map(t => (
             <button key={t} onClick={() => handleFilterChange(t)}
               className={`px-3 py-1.5 rounded-md text-sm font-medium capitalize transition-colors ${
                 filter === t
@@ -614,7 +684,12 @@ export default function DomainsPage() {
                       </svg>
                     </button>
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs text-gray-800">{d.domain}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-xs text-gray-800">{d.domain}</span>
+                      <TypeBadge type={d.domain_type} />
+                    </div>
+                  </td>
                   <td className="px-3 py-2">
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[d.status]}`}>{d.status}</span>
                   </td>

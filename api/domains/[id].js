@@ -14,7 +14,7 @@ const FIELD_MAP = {
 
 const ROTATOR_ALLOWED = [
   'doc_root', 'role', 'redtrack_lander_id', 'notes', 'category',
-  'lander_id', 'funnel_id', 'banned_at',
+  'lander_id', 'funnel_id', 'banned_at', 'domain_type',
   // mapped below:
   'status', 'priority',
 ];
