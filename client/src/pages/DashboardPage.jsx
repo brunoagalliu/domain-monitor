@@ -1,20 +1,50 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 
-function AddDomainForm({ onAdded }) {
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function domainStatus(d) {
+  if (d.scan_suspended) return 'suspended';
+  if (d.is_flagged)     return 'flagged';
+  if (d.is_suspicious)  return 'suspicious';
+  if (!d.last_browser_check && d.is_priority) return 'pending';
+  return 'safe';
+}
+
+function timeAgo(ts) {
+  if (!ts) return null;
+  const secs = Math.floor((Date.now() - new Date(ts)) / 1000);
+  if (secs < 60)   return `${secs}s ago`;
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
+  return `${Math.floor(secs / 86400)}d ago`;
+}
+
+const STATUS_ORDER  = { suspended: 0, flagged: 1, suspicious: 2, pending: 3, safe: 4 };
+const STATUS_BADGE  = {
+  suspended: 'bg-orange-100 text-orange-800 border border-orange-300',
+  flagged:   'bg-red-100 text-red-800',
+  suspicious:'bg-yellow-100 text-yellow-800',
+  pending:   'bg-blue-100 text-blue-800',
+  safe:      'bg-green-100 text-green-800',
+};
+const STATUS_DOT = {
+  suspended: 'bg-orange-400',
+  flagged:   'bg-red-500',
+  suspicious:'bg-yellow-400',
+  pending:   'bg-blue-400',
+  safe:      'bg-green-400',
+};
+
+// ── Add Domain inline form ────────────────────────────────────────────────────
+
+function AddDomainForm({ categories, onAdded }) {
   const [open,       setOpen]       = useState(false);
   const [domain,     setDomain]     = useState('');
   const [notes,      setNotes]      = useState('');
   const [categoryId, setCategoryId] = useState('');
-  const [categories, setCategories] = useState([]);
   const [saving,     setSaving]     = useState(false);
   const [error,      setError]      = useState('');
-
-  useEffect(() => {
-    if (open && categories.length === 0) {
-      api.get('/categories').then(setCategories).catch(() => {});
-    }
-  }, [open]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -28,11 +58,8 @@ function AddDomainForm({ onAdded }) {
       setDomain(''); setNotes(''); setCategoryId('');
       setOpen(false);
       onAdded();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
+    } catch (err) { setError(err.message); }
+    finally { setSaving(false); }
   }
 
   if (!open) {
@@ -48,14 +75,9 @@ function AddDomainForm({ onAdded }) {
     <form onSubmit={handleSubmit} className="flex items-end gap-3 flex-wrap">
       <div>
         <label className="block text-xs text-gray-500 mb-1">Domain *</label>
-        <input
-          value={domain}
-          onChange={e => setDomain(e.target.value)}
-          required
-          placeholder="example.com"
-          autoFocus
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-52"
-        />
+        <input value={domain} onChange={e => setDomain(e.target.value)} required
+          placeholder="example.com" autoFocus
+          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-52" />
       </div>
       <div>
         <label className="block text-xs text-gray-500 mb-1">Category</label>
@@ -76,47 +98,69 @@ function AddDomainForm({ onAdded }) {
         {saving ? 'Adding…' : 'Add'}
       </button>
       <button type="button" onClick={() => setOpen(false)}
-        className="text-sm text-gray-500 hover:text-gray-700 px-2 py-1.5">
-        Cancel
-      </button>
+        className="text-sm text-gray-500 hover:text-gray-700 px-2 py-1.5">Cancel</button>
     </form>
   );
 }
 
-const STATUS_ORDER = { suspended: 0, flagged: 1, suspicious: 2, unknown: 3, pending: 4, safe: 5 };
+// ── Category health cards ─────────────────────────────────────────────────────
 
-function domainStatus(d) {
-  if (d.scan_suspended) return 'suspended';
-  if (d.is_flagged)     return 'flagged';
-  if (d.is_suspicious)  return 'suspicious';
-  if (!d.last_browser_check && d.is_priority) return 'pending';
-  return 'safe';
+function CategoryCard({ label, color, domains, active, onClick }) {
+  const counts = domains.reduce((acc, d) => {
+    acc[domainStatus(d)] = (acc[domainStatus(d)] || 0) + 1;
+    return acc;
+  }, {});
+  const bad = (counts.flagged || 0) + (counts.suspended || 0) + (counts.suspicious || 0);
+
+  return (
+    <button
+      onClick={onClick}
+      className={`shrink-0 rounded-lg border px-4 py-3 text-left transition-all min-w-[130px] ${
+        active
+          ? 'border-indigo-500 ring-2 ring-indigo-200 bg-white'
+          : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+      }`}
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color || '#94a3b8' }} />
+        <span className="text-xs font-semibold text-gray-700 truncate">{label}</span>
+      </div>
+      <p className="text-xl font-bold text-gray-900">{domains.length}</p>
+      <div className="flex gap-2 mt-1">
+        {counts.safe      > 0 && <span className="text-xs text-green-600 font-medium">{counts.safe} safe</span>}
+        {bad              > 0 && <span className="text-xs text-red-600 font-medium">{bad} issue{bad !== 1 ? 's' : ''}</span>}
+        {counts.pending   > 0 && <span className="text-xs text-blue-500 font-medium">{counts.pending} pending</span>}
+      </div>
+    </button>
+  );
 }
 
-const STATUS_BADGE = {
-  suspended: 'bg-orange-100 text-orange-800 border border-orange-300',
-  flagged:   'bg-red-100 text-red-800',
-  suspicious:'bg-yellow-100 text-yellow-800',
-  pending:   'bg-blue-100 text-blue-800',
-  safe:      'bg-green-100 text-green-800',
-};
+// ── Main page ─────────────────────────────────────────────────────────────────
+
+const STATUS_TABS = ['all', 'flagged', 'suspicious', 'suspended', 'pending', 'safe'];
 
 export default function DashboardPage() {
   const [domains,     setDomains]     = useState([]);
+  const [categories,  setCategories]  = useState([]);
   const [stats,       setStats]       = useState(null);
   const [browser,     setBrowser]     = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [scanning,    setScanning]    = useState(null);
+  const [deleting,    setDeleting]    = useState(null);
   const [search,      setSearch]      = useState('');
+  const [statusTab,   setStatusTab]   = useState('all');
+  const [catFilter,   setCatFilter]   = useState(null); // category_id or null
 
   const load = useCallback(async () => {
     try {
-      const [doms, st, br] = await Promise.all([
+      const [doms, cats, st, br] = await Promise.all([
         api.get('/domains'),
+        api.get('/categories').catch(() => []),
         api.get('/stats').catch(() => null),
         api.get('/browser-status').catch(() => null),
       ]);
       setDomains(doms || []);
+      setCategories(cats || []);
       setStats(st);
       setBrowser(br);
     } finally {
@@ -138,48 +182,84 @@ export default function DashboardPage() {
   }
 
   async function submitForScan(domain) {
-    if (!confirm(`Submit "${domain.domain}" for re-scan? This will run both browser and Lookup API checks.`)) return;
+    if (!confirm(`Submit "${domain.domain}" for re-scan?`)) return;
     setScanning(domain.id);
     try {
       const result = await api.post(`/domains/${domain.id}/scan`);
       if (result.cleared) {
         alert(`Domain "${domain.domain}" cleared! Monitoring resumed.`);
       } else {
-        alert(`Domain "${domain.domain}" still flagged.\nBrowser: ${result.browserStatus}\nLookup API: ${result.lookupFlagged ? 'flagged' : 'clean'}`);
+        alert(`"${domain.domain}" still flagged.\nBrowser: ${result.browserStatus}\nLookup API: ${result.lookupFlagged ? 'flagged' : 'clean'}`);
       }
       load();
-    } catch (err) {
-      alert(`Scan failed: ${err.message}`);
-    } finally {
-      setScanning(null);
-    }
+    } catch (err) { alert(`Scan failed: ${err.message}`); }
+    finally { setScanning(null); }
   }
 
-  const sorted = [...domains]
-    .sort((a, b) => (STATUS_ORDER[domainStatus(a)] ?? 9) - (STATUS_ORDER[domainStatus(b)] ?? 9))
-    .filter(d => !search || d.domain.includes(search.toLowerCase()));
+  async function deleteDomain(domain) {
+    if (!confirm(`Remove "${domain.domain}" from monitoring?`)) return;
+    setDeleting(domain.id);
+    try {
+      await api.delete(`/domains/${domain.id}`);
+      setDomains(prev => prev.filter(d => d.id !== domain.id));
+    } catch (err) { alert(err.message); }
+    finally { setDeleting(null); }
+  }
 
-  const priorityDomains = domains.filter(d => d.is_priority);
-  const flaggedDomains  = domains.filter(d => d.scan_suspended || d.is_flagged);
+  // Build category map for cards
+  const catMap = {};
+  for (const c of categories) catMap[c.id] = c;
+
+  const uncategorized = domains.filter(d => !d.category_id);
+  const byCat = categories.map(c => ({
+    ...c,
+    domains: domains.filter(d => d.category_id === c.id),
+  })).filter(c => c.domains.length > 0);
+
+  // Filtered + sorted domain list
+  const filtered = domains
+    .filter(d => {
+      if (catFilter !== null && d.category_id !== catFilter) return false;
+      const st = domainStatus(d);
+      if (statusTab !== 'all' && st !== statusTab) return false;
+      if (search && !d.domain.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    })
+    .sort((a, b) => (STATUS_ORDER[domainStatus(a)] ?? 9) - (STATUS_ORDER[domainStatus(b)] ?? 9));
+
+  // Status tab counts (respects category filter and search)
+  function tabCount(tab) {
+    return domains.filter(d => {
+      if (catFilter !== null && d.category_id !== catFilter) return false;
+      if (search && !d.domain.toLowerCase().includes(search.toLowerCase())) return false;
+      if (tab === 'all') return true;
+      return domainStatus(d) === tab;
+    }).length;
+  }
+
+  const flaggedDomains = domains.filter(d => d.scan_suspended || d.is_flagged);
 
   return (
-    <div className="p-6 max-w-7xl space-y-6">
+    <div className="p-6 max-w-7xl space-y-5">
+
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <div className="flex items-center gap-3 flex-wrap">
-          <AddDomainForm onAdded={load} />
-          <button onClick={load} className="text-sm text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors">Refresh</button>
+          <AddDomainForm categories={categories} onAdded={load} />
+          <button onClick={load} className="text-sm text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors">
+            Refresh
+          </button>
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats row */}
       {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Total Domains', value: stats.total_domains },
-            { label: 'Flagged', value: stats.flagged_domains, color: 'text-red-600' },
-            { label: 'Priority', value: stats.priority_domains ?? priorityDomains.length, color: 'text-indigo-600' },
+            { label: 'Total',     value: stats.total_domains },
+            { label: 'Flagged',   value: stats.flagged_domains,   color: 'text-red-600' },
+            { label: 'Priority',  value: stats.priority_domains ?? domains.filter(d => d.is_priority).length, color: 'text-indigo-600' },
             { label: 'Suspended', value: stats.suspended_domains, color: 'text-orange-600' },
           ].map(s => (
             <div key={s.label} className="bg-white rounded-lg border border-gray-200 px-5 py-4">
@@ -190,37 +270,36 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Browser scanner status */}
+      {/* Browser scanner bar */}
       {browser && (
         <div className="bg-white rounded-lg border border-gray-200 px-5 py-3 flex items-center gap-4 text-sm">
           <span className={`w-2 h-2 rounded-full shrink-0 ${browser.browserReady ? 'bg-green-500' : 'bg-gray-300'}`} />
           <span className="text-gray-600 font-medium">{browser.browserReady ? 'Browser scanner ready' : 'Browser scanner offline'}</span>
           {browser.scanRunning && <span className="text-blue-600 text-xs">Scan running…</span>}
-          {browser.lastError && <span className="text-red-500 text-xs truncate">{browser.lastError}</span>}
+          {browser.lastError   && <span className="text-red-500 text-xs truncate max-w-xs">{browser.lastError}</span>}
           <span className="text-gray-400 text-xs ml-auto">{browser.priority} priority · {browser.suspended} suspended</span>
         </div>
       )}
 
-      {/* Flagged alert */}
+      {/* Action required */}
       {flaggedDomains.length > 0 && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <h2 className="text-sm font-semibold text-red-800 mb-3">Action Required — {flaggedDomains.length} domain{flaggedDomains.length !== 1 ? 's' : ''} flagged</h2>
+          <h2 className="text-sm font-semibold text-red-800 mb-3">
+            Action Required — {flaggedDomains.length} domain{flaggedDomains.length !== 1 ? 's' : ''} need attention
+          </h2>
           <div className="space-y-2">
             {flaggedDomains.map(d => (
               <div key={d.id} className="flex items-center justify-between bg-white rounded border border-red-100 px-3 py-2">
-                <div>
-                  <span className="font-mono text-sm text-gray-800">{d.domain}</span>
-                  {d.scan_suspended && <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">suspended</span>}
-                  {d.is_flagged && !d.scan_suspended && <span className="ml-2 text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">flagged</span>}
-                  {d.category_name && <span className="ml-2 text-xs text-gray-400">{d.category_name}</span>}
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-mono text-sm text-gray-800 truncate">{d.domain}</span>
+                  {d.scan_suspended && <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded shrink-0">suspended</span>}
+                  {d.is_flagged && !d.scan_suspended && <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded shrink-0">flagged</span>}
+                  {d.category_name && <span className="text-xs text-gray-400 shrink-0">{d.category_name}</span>}
                 </div>
                 {d.scan_suspended && (
-                  <button
-                    onClick={() => submitForScan(d)}
-                    disabled={scanning === d.id}
-                    className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-                  >
-                    {scanning === d.id ? 'Scanning…' : 'Submit for Scan'}
+                  <button onClick={() => submitForScan(d)} disabled={scanning === d.id}
+                    className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 transition-colors shrink-0">
+                    {scanning === d.id ? 'Scanning…' : 'Re-scan'}
                   </button>
                 )}
               </div>
@@ -229,80 +308,151 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Priority domains panel */}
-      {priorityDomains.length > 0 && (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-          <h2 className="text-sm font-semibold text-indigo-800 mb-3">Priority Domains ({priorityDomains.length}) — Browser scanned every 30s</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-            {priorityDomains.map(d => {
-              const st = domainStatus(d);
-              return (
-                <div key={d.id} className="bg-white rounded border border-indigo-100 px-3 py-2 flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${st === 'safe' ? 'bg-green-400' : st === 'flagged' || st === 'suspended' ? 'bg-red-400' : 'bg-yellow-300'}`} />
-                  <span className="font-mono text-xs text-gray-700 truncate flex-1">{d.domain}</span>
-                </div>
-              );
-            })}
+      {/* Category health cards */}
+      {(byCat.length > 0 || uncategorized.length > 0) && (
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">By Category</p>
+          <div className="flex gap-3 overflow-x-auto pb-1">
+            <CategoryCard
+              label="All"
+              color="#6366f1"
+              domains={domains}
+              active={catFilter === null}
+              onClick={() => setCatFilter(null)}
+            />
+            {byCat.map(c => (
+              <CategoryCard
+                key={c.id}
+                label={c.name}
+                color={c.color}
+                domains={c.domains}
+                active={catFilter === c.id}
+                onClick={() => setCatFilter(catFilter === c.id ? null : c.id)}
+              />
+            ))}
+            {uncategorized.length > 0 && (
+              <CategoryCard
+                label="Uncategorized"
+                color="#94a3b8"
+                domains={uncategorized}
+                active={catFilter === 0}
+                onClick={() => setCatFilter(catFilter === 0 ? null : 0)}
+              />
+            )}
           </div>
         </div>
       )}
 
       {/* Domain list */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Filter domains…"
-            className="flex-1 text-sm border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <span className="text-xs text-gray-400">{sorted.length} domains</span>
+
+        {/* Status tabs + search */}
+        <div className="border-b border-gray-100">
+          <div className="flex items-center gap-1 px-4 pt-3 overflow-x-auto">
+            {STATUS_TABS.map(tab => {
+              const count = tabCount(tab);
+              return (
+                <button key={tab} onClick={() => setStatusTab(tab)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-t-md whitespace-nowrap transition-colors ${
+                    statusTab === tab
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                  }`}>
+                  {tab === 'all' ? 'All' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  <span className={`ml-1.5 ${statusTab === tab ? 'opacity-75' : 'text-gray-400'}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="px-4 py-2 flex items-center gap-3">
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search domains…"
+              className="flex-1 text-sm border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            {catFilter !== null && (
+              <button onClick={() => setCatFilter(null)}
+                className="text-xs text-indigo-600 hover:text-indigo-800 whitespace-nowrap">
+                ✕ Clear filter
+              </button>
+            )}
+            <span className="text-xs text-gray-400 shrink-0">{filtered.length} domains</span>
+          </div>
         </div>
+
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Domain</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Category</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Browser</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Priority</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Actions</th>
+              <th className="text-left px-4 py-2.5 font-medium text-gray-500 text-xs">Domain</th>
+              <th className="text-left px-4 py-2.5 font-medium text-gray-500 text-xs">Status</th>
+              <th className="text-left px-4 py-2.5 font-medium text-gray-500 text-xs">Category</th>
+              <th className="text-left px-4 py-2.5 font-medium text-gray-500 text-xs">Browser result</th>
+              <th className="text-left px-4 py-2.5 font-medium text-gray-500 text-xs">Last checked</th>
+              <th className="text-left px-4 py-2.5 font-medium text-gray-500 text-xs">Priority</th>
+              <th className="text-left px-4 py-2.5 font-medium text-gray-500 text-xs">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
-              <tr><td colSpan={6} className="text-center py-10 text-gray-400">Loading...</td></tr>
-            ) : sorted.length === 0 ? (
-              <tr><td colSpan={6} className="text-center py-10 text-gray-400">No domains found</td></tr>
-            ) : sorted.map(d => {
+              <tr><td colSpan={7} className="text-center py-12 text-gray-400">Loading…</td></tr>
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={7} className="text-center py-12 text-gray-400">No domains match</td></tr>
+            ) : filtered.map(d => {
               const st = domainStatus(d);
+              const cat = catMap[d.category_id];
               return (
-                <tr key={d.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 font-mono text-xs text-gray-800">{d.domain}</td>
+                <tr key={d.id} className={`hover:bg-gray-50 transition-colors ${
+                  st === 'flagged' || st === 'suspended' ? 'bg-red-50/40' :
+                  st === 'suspicious' ? 'bg-yellow-50/40' : ''
+                }`}>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[st]}`} />
+                      <span className="font-mono text-xs text-gray-800">{d.domain}</span>
+                    </div>
+                    {d.notes && <p className="text-xs text-gray-400 mt-0.5 pl-3.5 truncate max-w-[200px]" title={d.notes}>{d.notes}</p>}
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[st]}`}>{st}</span>
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{d.category_name || '—'}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{d.browser_status || '—'}</td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => togglePriority(d)}
+                    {cat ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-700">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                        {cat.name}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300 text-xs">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{d.browser_status || '—'}</td>
+                  <td className="px-4 py-3 text-xs text-gray-400">
+                    {timeAgo(d.last_browser_check) || '—'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button onClick={() => togglePriority(d)}
                       title={d.is_priority ? 'Remove from priority' : 'Add to priority'}
-                      className="text-lg leading-none hover:scale-110 transition-transform"
-                    >
+                      className="text-lg leading-none hover:scale-110 transition-transform">
                       {d.is_priority ? '⭐' : '☆'}
                     </button>
                   </td>
                   <td className="px-4 py-3">
-                    {d.scan_suspended && (
-                      <button
-                        onClick={() => submitForScan(d)}
-                        disabled={scanning === d.id}
-                        className="text-xs px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-                      >
-                        {scanning === d.id ? 'Scanning…' : 'Submit for Scan'}
+                    <div className="flex items-center gap-1.5">
+                      {d.scan_suspended && (
+                        <button onClick={() => submitForScan(d)} disabled={scanning === d.id}
+                          className="text-xs px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+                          {scanning === d.id ? '…' : 'Re-scan'}
+                        </button>
+                      )}
+                      <button onClick={() => deleteDomain(d)} disabled={deleting === d.id}
+                        title="Remove from monitoring"
+                        className="text-gray-300 hover:text-red-500 transition-colors disabled:opacity-40 text-base leading-none px-1">
+                        {deleting === d.id ? '…' : '✕'}
                       </button>
-                    )}
+                    </div>
                   </td>
                 </tr>
               );
