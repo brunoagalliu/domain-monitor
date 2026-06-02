@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { api } from '../lib/api';
 import PublishToRTModal from '../components/PublishToRTModal';
 
@@ -155,6 +155,80 @@ function DomainForm({ initial = {}, landers, onSave, onClose }) {
   );
 }
 
+function RTLanderPicker({ onSelect, onCancel }) {
+  const [rtLanders, setRtLanders] = useState(null);
+  const [query,     setQuery]     = useState('');
+  const [open,      setOpen]      = useState(false);
+  const [error,     setError]     = useState('');
+  const ref = useRef(null);
+
+  useEffect(() => {
+    api.get('/redtrack/landings')
+      .then(data => setRtLanders((data.items || data || []).map(l => ({ id: l.id || l._id, title: l.title || l.name || l.id }))))
+      .catch(err => setError(err.message));
+  }, []);
+
+  useEffect(() => {
+    function onClick(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  const filtered = (rtLanders || []).filter(l => l.title.toLowerCase().includes(query.toLowerCase())).slice(0, 50);
+
+  if (error) return (
+    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100">
+      <span className="text-xs text-red-500">RT error: {error}</span>
+      <button onClick={onCancel} className="text-xs text-gray-400 hover:text-gray-600 underline">Cancel</button>
+    </div>
+  );
+
+  if (!rtLanders) return (
+    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100">
+      <span className="text-xs text-gray-400">Loading RT landers…</span>
+      <button onClick={onCancel} className="text-xs text-gray-400 hover:text-gray-600 underline">Cancel</button>
+    </div>
+  );
+
+  return (
+    <div className="mt-2 pt-2 border-t border-gray-100">
+      <div ref={ref} className="relative flex items-center gap-2">
+        <div className="relative flex-1">
+          <input
+            autoFocus
+            value={query}
+            onChange={e => { setQuery(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+            placeholder="Search RT landers…"
+            className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+          {open && filtered.length > 0 && (
+            <div className="absolute z-20 top-full left-0 mt-1 w-full max-h-48 overflow-y-auto bg-white border border-gray-200 rounded shadow-lg">
+              {filtered.map(l => (
+                <button key={l.id} type="button"
+                  onMouseDown={e => { e.preventDefault(); onSelect(l); }}
+                  className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 transition-colors border-b border-gray-50 last:border-0">
+                  <span className="font-medium">{l.title}</span>
+                  <span className="ml-2 text-gray-400 font-mono">{String(l.id).slice(0, 8)}…</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {open && rtLanders.length > 0 && filtered.length === 0 && (
+            <div className="absolute z-20 top-full left-0 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg px-3 py-2 text-xs text-gray-400">
+              No landers match "{query}"
+            </div>
+          )}
+        </div>
+        <button onClick={onCancel}
+          className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors whitespace-nowrap">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function LandersSubRow({ domain, allLanders, onChanged }) {
   const [landers,      setLanders]      = useState(null);
   const [adding,       setAdding]       = useState(false);
@@ -164,7 +238,6 @@ function LandersSubRow({ domain, allLanders, onChanged }) {
   const [deploying,    setDeploying]    = useState(null);
   const [publishingDl, setPublishingDl] = useState(null);
   const [linkingId,    setLinkingId]    = useState(null);
-  const [linkInput,    setLinkInput]    = useState('');
   const [linkSaving,   setLinkSaving]   = useState(false);
 
   const load = useCallback(async () => {
@@ -201,12 +274,14 @@ function LandersSubRow({ domain, allLanders, onChanged }) {
     finally { setDeploying(null); }
   }
 
-  async function handleLinkRT(dlId) {
-    if (!linkInput.trim()) return;
+  async function handleLinkRT(dlId, rtLander) {
     setLinkSaving(true);
     try {
-      await api.patch(`/domains/${domain.id}/landers/${dlId}`, { redtrack_lander_id: linkInput.trim() });
-      setLinkingId(null); setLinkInput('');
+      await api.patch(`/domains/${domain.id}/landers/${dlId}`, {
+        redtrack_lander_id:    rtLander.id,
+        redtrack_lander_title: rtLander.title,
+      });
+      setLinkingId(null);
       load(); onChanged();
     } catch (err) { alert(`Link failed: ${err.message}`); }
     finally { setLinkSaving(false); }
@@ -244,13 +319,13 @@ function LandersSubRow({ domain, allLanders, onChanged }) {
                             <>
                               <a href={`https://app.redtrack.io/landers/edit/${dl.redtrack_lander_id}`} target="_blank" rel="noopener noreferrer"
                                 className="text-xs font-mono text-green-600 hover:underline">
-                                RT #{dl.redtrack_lander_id.slice(0, 10)}…
+                                RT #{dl.redtrack_lander_id.slice(0, 8)}…
                               </a>
-                              <button onClick={() => { setLinkingId(dl.id); setLinkInput(dl.redtrack_lander_id); }}
+                              <button onClick={() => setLinkingId(dl.id)}
                                 className="text-xs text-gray-400 hover:text-gray-600 underline">re-link</button>
                             </>
                           ) : (
-                            <button onClick={() => { setLinkingId(dl.id); setLinkInput(''); }}
+                            <button onClick={() => setLinkingId(dl.id)}
                               className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded hover:bg-gray-200 transition-colors">
                               + Link RT
                             </button>
@@ -272,18 +347,14 @@ function LandersSubRow({ domain, allLanders, onChanged }) {
                         </button>
                       </div>
                     </div>
-                    {linkingId === dl.id && (
-                      <div className="mt-2 flex items-center gap-1.5 pt-2 border-t border-gray-100">
-                        <input value={linkInput} onChange={e => setLinkInput(e.target.value)}
-                          placeholder="Paste RT lander ID…" autoFocus
-                          className="text-xs border border-gray-300 rounded px-2 py-1 w-56 font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500" />
-                        <button onClick={() => handleLinkRT(dl.id)} disabled={linkSaving || !linkInput.trim()}
-                          className="text-xs px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 transition-colors">
-                          {linkSaving ? '…' : 'Save'}
-                        </button>
-                        <button onClick={() => { setLinkingId(null); setLinkInput(''); }}
-                          className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors">Cancel</button>
-                      </div>
+                    {linkingId === dl.id && !linkSaving && (
+                      <RTLanderPicker
+                        onSelect={rtLander => handleLinkRT(dl.id, rtLander)}
+                        onCancel={() => setLinkingId(null)}
+                      />
+                    )}
+                    {linkingId === dl.id && linkSaving && (
+                      <p className="mt-2 text-xs text-gray-400 pt-2 border-t border-gray-100">Saving…</p>
                     )}
                   </div>
                 ))}
