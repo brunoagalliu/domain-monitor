@@ -1,6 +1,88 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 
+function AddDomainForm({ onAdded }) {
+  const [open,       setOpen]       = useState(false);
+  const [domain,     setDomain]     = useState('');
+  const [notes,      setNotes]      = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [categories, setCategories] = useState([]);
+  const [saving,     setSaving]     = useState(false);
+  const [error,      setError]      = useState('');
+
+  useEffect(() => {
+    if (open && categories.length === 0) {
+      api.get('/categories').then(setCategories).catch(() => {});
+    }
+  }, [open]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSaving(true); setError('');
+    try {
+      await api.post('/domains', {
+        domain:      domain.trim().toLowerCase(),
+        notes:       notes.trim() || undefined,
+        category_id: categoryId ? Number(categoryId) : undefined,
+      });
+      setDomain(''); setNotes(''); setCategoryId('');
+      setOpen(false);
+      onAdded();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)}
+        className="text-sm bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors font-medium">
+        + Add Domain
+      </button>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex items-end gap-3 flex-wrap">
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">Domain *</label>
+        <input
+          value={domain}
+          onChange={e => setDomain(e.target.value)}
+          required
+          placeholder="example.com"
+          autoFocus
+          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-52"
+        />
+      </div>
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">Category</label>
+        <select value={categoryId} onChange={e => setCategoryId(e.target.value)}
+          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="">— none —</option>
+          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">Notes</label>
+        <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional"
+          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-36" />
+      </div>
+      {error && <p className="text-red-600 text-xs self-center">{error}</p>}
+      <button type="submit" disabled={saving || !domain.trim()}
+        className="text-sm bg-indigo-600 text-white px-4 py-1.5 rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+        {saving ? 'Adding…' : 'Add'}
+      </button>
+      <button type="button" onClick={() => setOpen(false)}
+        className="text-sm text-gray-500 hover:text-gray-700 px-2 py-1.5">
+        Cancel
+      </button>
+    </form>
+  );
+}
+
 const STATUS_ORDER = { suspended: 0, flagged: 1, suspicious: 2, unknown: 3, pending: 4, safe: 5 };
 
 function domainStatus(d) {
@@ -83,9 +165,12 @@ export default function DashboardPage() {
   return (
     <div className="p-6 max-w-7xl space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <button onClick={load} className="text-sm text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors">Refresh</button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <AddDomainForm onAdded={load} />
+          <button onClick={load} className="text-sm text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors">Refresh</button>
+        </div>
       </div>
 
       {/* Stats */}
