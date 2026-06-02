@@ -21,6 +21,7 @@ app.use('/api/landers', require('./api/landers'));
 app.use('/api/rotate', require('./api/rotate'));
 app.use('/api/history', require('./api/rotation-history'));
 app.use('/api/redtrack', require('./api/redtrack').router);
+app.use('/api/files', require('./api/files'));
 
 // Domain-landers sub-routes (MUST be before the /api/domains/:id catch-all)
 app.use('/api/domains/:id/landers', require('./api/domains/landers'));

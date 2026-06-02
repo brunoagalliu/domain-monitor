@@ -11,6 +11,7 @@ import FunnelDetailPage from './pages/FunnelDetailPage';
 import DomainsPage      from './pages/DomainsPage';
 import LandersPage      from './pages/LandersPage';
 import HistoryPage      from './pages/HistoryPage';
+import FilesPage        from './pages/FilesPage';
 
 function RequireAuth({ children }) {
   return getToken() ? children : <Navigate to="/login" replace />;
@@ -159,6 +160,7 @@ function AppLayout() {
           <Route path="/domains"    element={<DomainsPage />} />
           <Route path="/landers"    element={<LandersPage />} />
           <Route path="/history"    element={<HistoryPage />} />
+          <Route path="/files/:domainId" element={<FilesPage />} />
         </Routes>
       </main>
     </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import PublishToRTModal from '../components/PublishToRTModal';
 
@@ -398,6 +399,7 @@ const TABS = ['all', 'active', 'standby', 'banned'];
 const PER_PAGE_OPTIONS = [25, 50, 100];
 
 export default function DomainsPage() {
+  const navigate = useNavigate();
   const [domains,   setDomains]   = useState([]);
   const [landers,   setLanders]   = useState([]);
   const [filter,    setFilter]    = useState('all');
@@ -649,6 +651,9 @@ export default function DomainsPage() {
                           Restore
                         </button>
                       )}
+                      <button onClick={() => navigate(`/files/${d.id}`)}
+                        className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
+                        title="Open file manager">Files</button>
                       <button onClick={() => setModal(d)}
                         className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors">Edit</button>
                       <button onClick={() => handleDelete(d.id, d.domain)}
