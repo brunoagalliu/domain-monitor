@@ -83,7 +83,7 @@ router.post('/by-stream', async (req, res) => {
     const { rows: [funnel] } = await pool.query(
       `INSERT INTO funnels (name, redtrack_stream_id)
        VALUES ($1, $2)
-       ON CONFLICT (redtrack_stream_id) DO UPDATE SET name = EXCLUDED.name
+       ON CONFLICT (redtrack_stream_id) WHERE redtrack_stream_id IS NOT NULL DO UPDATE SET name = EXCLUDED.name
        RETURNING *`,
       [title || redtrack_stream_id, redtrack_stream_id]
     );
