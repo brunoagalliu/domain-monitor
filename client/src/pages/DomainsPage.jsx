@@ -479,18 +479,26 @@ export default function DomainsPage() {
     else { setSortKey(key); setSortDir('asc'); }
   }
 
-  const counts     = domains.reduce((acc, d) => { acc[d.status] = (acc[d.status] || 0) + 1; return acc; }, {});
-  const typeCounts = domains.reduce((acc, d) => {
+  // Type counts always from full list so the type pills show totals
+  const typeCounts = useMemo(() => domains.reduce((acc, d) => {
     const k = d.domain_type || 'none';
     acc[k] = (acc[k] || 0) + 1;
     return acc;
-  }, {});
+  }, {}), [domains]);
+
+  // Base list after applying type filter — status counts and status filter both work from this
+  const typeFiltered = useMemo(() => {
+    if (typeFilter === 'all') return domains;
+    return domains.filter(d => typeFilter === 'none' ? !d.domain_type : d.domain_type === typeFilter);
+  }, [domains, typeFilter]);
+
+  // Status counts reflect current type filter
+  const counts = useMemo(() =>
+    typeFiltered.reduce((acc, d) => { acc[d.status] = (acc[d.status] || 0) + 1; return acc; }, {}),
+  [typeFiltered]);
 
   const filtered = useMemo(() => {
-    let list = filter === 'all' ? domains : domains.filter(d => d.status === filter);
-    if (typeFilter !== 'all') {
-      list = list.filter(d => typeFilter === 'none' ? !d.domain_type : d.domain_type === typeFilter);
-    }
+    let list = filter === 'all' ? typeFiltered : typeFiltered.filter(d => d.status === filter);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(d =>
@@ -509,7 +517,7 @@ export default function DomainsPage() {
       return 0;
     });
     return list;
-  }, [domains, filter, search, sortKey, sortDir]);
+  }, [typeFiltered, filter, search, sortKey, sortDir]);
 
   const totalPages = Math.ceil(filtered.length / perPage);
   const paginated  = filtered.slice(page * perPage, (page + 1) * perPage);
@@ -619,7 +627,7 @@ export default function DomainsPage() {
                     ? 'text-red-600 hover:bg-red-50'
                     : 'text-gray-600 hover:bg-gray-100'
               }`}>
-              {t} ({t === 'all' ? domains.length : counts[t] || 0})
+              {t} ({t === 'all' ? typeFiltered.length : counts[t] || 0})
             </button>
           ))}
         </div>
