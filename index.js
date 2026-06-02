@@ -128,6 +128,20 @@ app.get('/api/migrate', async (req, res) => {
   }
 });
 
+// One-time data migration from domain-rotator (remove after first use)
+app.get('/api/migrate-rotator', async (req, res) => {
+  if (!process.env.ROTATOR_DATABASE_URL) {
+    return res.status(400).json({ error: 'ROTATOR_DATABASE_URL not set' });
+  }
+  try {
+    const { migrateFromRotator } = require('./migrate-from-rotator');
+    const result = await migrateFromRotator();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Cron: Lookup API scan every 2 minutes (all non-suspended domains)
 cron.schedule('*/2 * * * *', async () => {
   try {
