@@ -264,7 +264,7 @@ export default function FilesPage() {
   if (!domain) return <div className="p-6 text-gray-400">Loading domain…</div>;
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
+    <div className="flex flex-col h-full overflow-hidden bg-gray-50">
       {/* Top bar */}
       <div className="flex items-center gap-3 px-4 py-2.5 bg-white border-b border-gray-200 shrink-0">
         <button onClick={() => navigate('/domains')} className="text-gray-400 hover:text-gray-600 transition-colors">
@@ -373,13 +373,14 @@ export default function FilesPage() {
               {loadingFile ? (
                 <div className="flex-1 flex items-center justify-center bg-gray-900 text-gray-400 text-sm">Loading…</div>
               ) : (
-                <div className="flex-1 overflow-auto">
+                <div className="flex-1 min-h-0 overflow-hidden">
                   <CodeMirror
                     value={content}
                     height="100%"
                     theme={oneDark}
                     extensions={[langFor(selectedName)]}
                     onChange={val => setContent(val)}
+                    basicSetup={{ lineNumbers: true, foldGutter: true }}
                     style={{ height: '100%', fontSize: '13px' }}
                   />
                 </div>

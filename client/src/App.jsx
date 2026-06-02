@@ -106,7 +106,7 @@ function Sidebar() {
     }`;
 
   return (
-    <aside className="w-56 shrink-0 bg-white border-r border-gray-200 min-h-screen px-4 py-6 flex flex-col">
+    <aside className="w-56 shrink-0 bg-white border-r border-gray-200 h-full overflow-y-auto px-4 py-6 flex flex-col">
       <div className="mb-8">
         <span className="text-lg font-bold text-indigo-600">Domain</span>
         <span className="text-lg font-light text-gray-500"> Monitor</span>
@@ -147,9 +147,9 @@ function Sidebar() {
 
 function AppLayout() {
   return (
-    <div className="flex">
+    <div className="flex h-screen overflow-hidden">
       <Sidebar />
-      <main className="flex-1 min-h-screen bg-gray-50">
+      <main className="flex-1 h-full overflow-auto bg-gray-50">
         <Routes>
           <Route path="/"           element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard"  element={<DashboardPage />} />
