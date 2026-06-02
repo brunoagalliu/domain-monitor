@@ -15,36 +15,35 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { username, password } = req.body;
+  const { password } = req.body;
 
-  const adminUser = process.env.ADMIN_USERNAME;
   const adminPass = process.env.ADMIN_PASSWORD;
   const secret = process.env.JWT_SECRET;
 
-  if (!adminUser || !adminPass || !secret) {
+  if (!adminPass || !secret) {
     return res.status(500).json({ error: 'Auth not configured on server' });
   }
 
-  // Timing-safe comparison to prevent enumeration attacks
-  const userMatch = crypto.timingSafeEqual(
-    Buffer.from(username || ''),
-    Buffer.from(adminUser)
-  );
-  const passMatch = crypto.timingSafeEqual(
-    Buffer.from(password || ''),
-    Buffer.from(adminPass)
-  );
+  const passBuf     = Buffer.from(password || '');
+  const expectedBuf = Buffer.from(adminPass);
 
-  if (!userMatch || !passMatch) {
-    return res.status(401).json({ error: 'Invalid username or password' });
+  // timingSafeEqual requires same length — pad to avoid throwing
+  const maxLen = Math.max(passBuf.length, expectedBuf.length);
+  const a = Buffer.alloc(maxLen); passBuf.copy(a);
+  const b = Buffer.alloc(maxLen); expectedBuf.copy(b);
+
+  const passMatch = crypto.timingSafeEqual(a, b) && passBuf.length === expectedBuf.length;
+
+  if (!passMatch) {
+    return res.status(401).json({ error: 'Invalid password' });
   }
 
-  const token = jwt.sign({ username: adminUser }, secret, { expiresIn: '24h' });
+  const token = jwt.sign({ user: 'admin' }, secret, { expiresIn: '7d' });
 
   res.setHeader(
     'Set-Cookie',
-    `token=${token}; HttpOnly; Path=/; SameSite=Strict; Max-Age=86400`
+    `token=${token}; HttpOnly; Path=/; SameSite=Strict; Max-Age=604800`
   );
 
-  return res.status(200).json({ success: true });
+  return res.status(200).json({ token });
 };
