@@ -163,9 +163,13 @@ class TelegramNotifier {
     let msg = `🔄 <b>AUTO-ROTATION TRIGGERED</b>\n\n`;
     msg += `<i>Flagged domain(s) automatically rotated out of their funnels.</i>\n\n`;
     rotations.forEach((r, i) => {
-      msg += `${i + 1}. 🚫 <b>${r.from}</b> → ✅ <b>${r.to || 'no standby available'}</b>\n`;
-      if (r.funnel) msg += `   📂 Funnel: ${r.funnel}\n`;
-      if (r.warning) msg += `   ⚠️ RT update failed: ${r.warning}\n`;
+      if (r.directMode) {
+        msg += `${i + 1}. 🚫 <b>${r.from}</b> → 📢 <b>Direct offers only</b> (no standby left)\n`;
+      } else {
+        msg += `${i + 1}. 🚫 <b>${r.from}</b> → ✅ <b>${r.to}</b>\n`;
+      }
+      if (r.funnel)  msg += `   📂 Funnel: ${r.funnel}\n`;
+      if (r.warning) msg += `   ⚠️ RT: ${r.warning}\n`;
       msg += `\n`;
     });
     msg += `🔗 <a href="${process.env.DASHBOARD_URL || ''}">View Dashboard</a>`;

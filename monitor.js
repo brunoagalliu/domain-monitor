@@ -6,9 +6,9 @@ const TelegramNotifier = require('./telegram-notifier');
 const { rotate } = require('./lib/rotator');
 require('dotenv').config();
 
-// Fire rotate() for each newly-suspended domain whose funnel has auto_rotate=true
-async function autoRotateSuspended(suspendedIds, telegram) {
-  if (!suspendedIds.length) return;
+// Fire rotate() on first flag from either scan method for active domains in auto-rotate funnels
+async function autoRotateNewlyFlagged(newlyFlaggedIds, telegram) {
+  if (!newlyFlaggedIds.length) return;
   const [candidates] = await db.execute(
     `SELECT d.domain, f.name AS funnel_name
      FROM domains d
@@ -16,17 +16,17 @@ async function autoRotateSuspended(suspendedIds, telegram) {
      WHERE d.id = ANY($1)
        AND d.rotator_status = 'active'
        AND f.auto_rotate = true`,
-    [suspendedIds]
+    [newlyFlaggedIds]
   );
   if (!candidates.length) return;
 
-  console.log(`[monitor] auto-rotating ${candidates.length} domain(s)`);
+  console.log(`[monitor] auto-rotating ${candidates.length} domain(s) on first flag`);
   const rotations = [];
   for (const c of candidates) {
     try {
       const result = await rotate(c.domain, 'auto_monitor');
-      rotations.push({ from: c.domain, to: result.toDomain, funnel: c.funnel_name, warning: result.rtWarning });
-      console.log(`[monitor] auto-rotated ${c.domain} → ${result.toDomain}`);
+      rotations.push({ from: c.domain, to: result.toDomain, funnel: c.funnel_name, warning: result.rtWarning, directMode: result.directMode });
+      console.log(`[monitor] auto-rotated ${c.domain} → ${result.toDomain || (result.directMode ? 'direct offers' : 'none')}`);
     } catch (err) {
       rotations.push({ from: c.domain, to: null, funnel: c.funnel_name, warning: err.message });
       console.error(`[monitor] auto-rotate failed for ${c.domain}:`, err.message);
@@ -221,7 +221,7 @@ class DomainMonitor {
         );
       }
 
-      if (toSuspend.length) await autoRotateSuspended(toSuspend, this.telegram);
+      if (toSetFlagged.length) await autoRotateNewlyFlagged(toSetFlagged, this.telegram);
 
       if (suspendedCount) console.log(`⏸ ${suspendedCount} domain(s) suspended (awaiting manual review)`);
       if (toSuspend.length) console.log(`🔒 ${toSuspend.length} domain(s) newly suspended (confirmed by both methods)`);
@@ -318,7 +318,7 @@ class DomainMonitor {
         ),
       ].filter(Boolean));
 
-      if (toSuspend.length) await autoRotateSuspended(toSuspend, this.telegram);
+      if (toSetFlagged.length) await autoRotateNewlyFlagged(toSetFlagged, this.telegram);
 
       if (newDangerous.length) {
         const logRows = newDangerous.map(d => [d.domain, d.category || null, 'browser', 'CHROME_BROWSING']);
