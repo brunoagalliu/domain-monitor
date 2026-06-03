@@ -219,6 +219,10 @@ class DomainMonitor {
           `INSERT INTO scan_results (domain_id, is_safe, threat_types, platform_types, threat_entry_types) VALUES ${placeholders}`,
           scanRows.flat()
         );
+        await db.execute(
+          `UPDATE domains SET last_lookup_check = NOW() WHERE id = ANY($1)`,
+          [domainIds]
+        );
       }
 
       if (toSetFlagged.length) await autoRotateNewlyFlagged(toSetFlagged, this.telegram);

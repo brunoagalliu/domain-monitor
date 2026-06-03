@@ -203,6 +203,10 @@ const migrations = [
   {
     name: 'Add cpanel_path to landers',
     sql: `ALTER TABLE landers ADD COLUMN IF NOT EXISTS cpanel_path TEXT DEFAULT NULL`
+  },
+  {
+    name: 'Add last_lookup_check to domains',
+    sql: `ALTER TABLE domains ADD COLUMN IF NOT EXISTS last_lookup_check TIMESTAMP DEFAULT NULL`
   }
 ];
 

@@ -498,7 +498,14 @@ export default function DashboardPage() {
                     ) : <span className="text-gray-300 text-xs">—</span>}
                   </td>
                   <td className="px-4 py-2.5 text-xs text-gray-500">{d.browser_status || '—'}</td>
-                  <td className="px-4 py-2.5 text-xs text-gray-400">{timeAgo(d.last_browser_check) || '—'}</td>
+                  <td className="px-4 py-2.5 text-xs text-gray-400">
+                    {timeAgo(
+                      [d.last_browser_check, d.last_lookup_check]
+                        .filter(Boolean)
+                        .sort()
+                        .at(-1)
+                    ) || '—'}
+                  </td>
                   <td className="px-4 py-2.5">
                     <button onClick={() => togglePriority(d)}
                       title={d.is_priority ? 'Remove priority' : 'Add to priority'}
