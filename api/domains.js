@@ -44,19 +44,42 @@ module.exports = async (req, res) => {
     }
     
     if (req.method === 'POST') {
-      // Add domain
-      const { domain, notes, category_id } = req.body;
-      
-      if (!domain) {
-        return res.status(400).json({ error: 'Domain is required' });
-      }
-      
-      const monitor = new DomainMonitor();
-      const domainId = await monitor.addDomain(domain, notes || '', category_id || null);
-      return res.status(200).json({ 
-        message: 'Domain added successfully', 
-        id: domainId,
-        domain: domain 
+      const { domain, notes, category_id, doc_root, status, domain_type, lander_id, priority } = req.body;
+
+      if (!domain) return res.status(400).json({ error: 'Domain is required' });
+
+      const clean = domain.replace(/^https?:\/\//, '').toLowerCase().trim();
+
+      const [rows] = await db.execute(
+        `INSERT INTO domains
+           (domain, notes, category_id, doc_root, rotator_status, domain_type, lander_id, rotator_priority)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (domain) DO UPDATE SET
+           notes            = EXCLUDED.notes,
+           category_id      = EXCLUDED.category_id,
+           doc_root         = EXCLUDED.doc_root,
+           rotator_status   = EXCLUDED.rotator_status,
+           domain_type      = EXCLUDED.domain_type,
+           lander_id        = EXCLUDED.lander_id,
+           rotator_priority = EXCLUDED.rotator_priority,
+           is_active        = true
+         RETURNING *`,
+        [
+          clean,
+          notes    || '',
+          category_id  ? Number(category_id)  : null,
+          doc_root     || null,
+          status       || 'standby',
+          domain_type  || null,
+          lander_id    ? Number(lander_id)    : null,
+          priority     ? Number(priority)     : 0,
+        ]
+      );
+
+      return res.status(200).json({
+        message: 'Domain added successfully',
+        id: rows[0].id,
+        domain: clean,
       });
     }
 
