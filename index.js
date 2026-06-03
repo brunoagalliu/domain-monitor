@@ -26,6 +26,15 @@ app.use('/api/cloudflare', require('./api/cloudflare'));
 app.use('/api/recovery',  require('./api/recovery'));
 app.use('/api/gsc',       require('./api/gsc'));
 
+// One-time fix: clear scan_suspended on manually-banned domains
+app.post('/api/fix/clear-banned-suspension', async (req, res) => {
+  const { execute } = require('./db');
+  const [, result] = await execute(
+    `UPDATE domains SET scan_suspended = false WHERE rotator_status = 'banned' AND scan_suspended = true`
+  );
+  res.json({ fixed: result.rowCount });
+});
+
 // Domain-landers sub-routes (MUST be before the /api/domains/:id catch-all)
 app.use('/api/domains/:id/landers', require('./api/domains/landers'));
 

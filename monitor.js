@@ -112,9 +112,9 @@ class DomainMonitor {
         return { scanned: 0, safe: 0, flagged: 0, suspended: 0, newFlags: 0 };
       }
 
-      // Skip suspended domains — they wait for manual review
-      const domains = allDomains.filter(d => !d.scan_suspended);
-      const suspendedCount = allDomains.length - domains.length;
+      // Skip suspended domains and banned (rotated-out) domains
+      const domains = allDomains.filter(d => !d.scan_suspended && d.rotator_status !== 'banned');
+      const suspendedCount = allDomains.filter(d => d.scan_suspended).length;
 
       if (!domains.length) {
         console.log(`ℹ️ All ${suspendedCount} domain(s) suspended — awaiting manual review`);
@@ -265,8 +265,8 @@ class DomainMonitor {
     try {
       const allDomains = await this.getActiveDomains();
 
-      // Only scan priority domains that aren't suspended
-      const domains = allDomains.filter(d => d.is_priority && !d.scan_suspended);
+      // Only scan priority domains that aren't suspended or banned
+      const domains = allDomains.filter(d => d.is_priority && !d.scan_suspended && d.rotator_status !== 'banned');
 
       if (!domains.length) {
         return; // silent — no priority domains configured yet
