@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import CodeMirror from '@uiw/react-codemirror';
+import { EditorView } from '@codemirror/view';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { html }       from '@codemirror/lang-html';
 import { css }        from '@codemirror/lang-css';
@@ -177,6 +178,7 @@ export default function FilesPage() {
   const [treeKey,      setTreeKey]      = useState(0);
   const [newName,      setNewName]      = useState('');
   const [newType,      setNewType]      = useState(null); // 'file' | 'dir'
+  const [lineWrap,     setLineWrap]     = useState(false);
   const uploadRef = useRef(null);
 
   useEffect(() => {
@@ -364,10 +366,22 @@ export default function FilesPage() {
           {selectedPath ? (
             <>
               {/* File tab bar */}
-              <div className="flex items-center gap-2 px-4 py-2 bg-gray-800 text-xs text-gray-300 shrink-0 border-b border-gray-700">
+              <div className="flex items-center gap-3 px-4 py-2 bg-gray-800 text-xs text-gray-300 shrink-0 border-b border-gray-700">
                 <span className="font-mono">{selectedName}</span>
                 {isDirty && <span className="text-amber-400">●</span>}
-                <span className="text-gray-600 ml-auto font-mono text-[10px]">{selectedPath}</span>
+                <div className="ml-auto flex items-center gap-3">
+                  <button onClick={() => setLineWrap(w => !w)}
+                    title="Toggle line wrap"
+                    className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                      lineWrap ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'
+                    }`}>
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6h18M3 12h12a3 3 0 010 6H9l3-3m0 6l-3-3" />
+                    </svg>
+                    Wrap
+                  </button>
+                  <span className="text-gray-600 font-mono text-[10px] truncate max-w-xs">{selectedPath}</span>
+                </div>
               </div>
 
               {loadingFile ? (
@@ -378,7 +392,7 @@ export default function FilesPage() {
                     value={content}
                     height="100%"
                     theme={oneDark}
-                    extensions={[langFor(selectedName)]}
+                    extensions={[langFor(selectedName), ...(lineWrap ? [EditorView.lineWrapping] : [])]}
                     onChange={val => setContent(val)}
                     basicSetup={{ lineNumbers: true, foldGutter: true }}
                     style={{ height: '100%', fontSize: '13px' }}
