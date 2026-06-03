@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import PublishToRTModal from '../components/PublishToRTModal';
+import DomainHealthModal from '../components/DomainHealthModal';
 
 const STATUS_COLORS = {
   active:  'bg-green-100 text-green-800',
@@ -467,9 +468,10 @@ export default function DomainsPage() {
   const [expanded,  setExpanded]  = useState(new Set());
   const [page,      setPage]      = useState(0);
   const [perPage,   setPerPage]   = useState(25);
-  const [sortKey,   setSortKey]   = useState('domain');
-  const [sortDir,   setSortDir]   = useState('asc');
-  const [cfZones,   setCfZones]   = useState({});
+  const [sortKey,     setSortKey]     = useState('domain');
+  const [sortDir,     setSortDir]     = useState('asc');
+  const [cfZones,     setCfZones]     = useState({});
+  const [healthDomain, setHealthDomain] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -762,6 +764,9 @@ export default function DomainsPage() {
                           Restore
                         </button>
                       )}
+                      <button onClick={() => setHealthDomain(d)}
+                        className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-100 transition-colors"
+                        title="Domain health: Cloudflare, GSC, Recovery">Health</button>
                       <button onClick={() => navigate(`/files/${d.id}`)}
                         className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
                         title="Open file manager">Files</button>
@@ -816,6 +821,14 @@ export default function DomainsPage() {
             onClose={() => setModal(null)}
           />
         </Modal>
+      )}
+
+      {healthDomain && (
+        <DomainHealthModal
+          domain={healthDomain}
+          cfZone={cfZones[healthDomain.domain] || null}
+          onClose={() => setHealthDomain(null)}
+        />
       )}
     </div>
   );

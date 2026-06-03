@@ -173,6 +173,32 @@ const migrations = [
   {
     name: 'Add domain_type to domains',
     sql: `ALTER TABLE domains ADD COLUMN IF NOT EXISTS domain_type VARCHAR(20) DEFAULT NULL CHECK (domain_type IN ('brand', 'non-brand'))`
+  },
+  {
+    name: 'Add recovery_status to domains',
+    sql: `ALTER TABLE domains ADD COLUMN IF NOT EXISTS recovery_status VARCHAR(20) DEFAULT NULL`
+  },
+  {
+    name: 'Create domain_recovery_logs table',
+    sql: `
+      CREATE TABLE IF NOT EXISTS domain_recovery_logs (
+        id SERIAL PRIMARY KEY,
+        domain_id INTEGER NOT NULL REFERENCES domains(id) ON DELETE CASCADE,
+        status VARCHAR(20) NOT NULL,
+        note TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `
+  },
+  {
+    name: 'Create settings table',
+    sql: `
+      CREATE TABLE IF NOT EXISTS settings (
+        key VARCHAR(100) PRIMARY KEY,
+        value TEXT,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `
   }
 ];
 

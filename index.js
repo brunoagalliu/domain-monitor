@@ -23,6 +23,8 @@ app.use('/api/history', require('./api/rotation-history'));
 app.use('/api/redtrack', require('./api/redtrack').router);
 app.use('/api/files', require('./api/files'));
 app.use('/api/cloudflare', require('./api/cloudflare'));
+app.use('/api/recovery',  require('./api/recovery'));
+app.use('/api/gsc',       require('./api/gsc'));
 
 // Domain-landers sub-routes (MUST be before the /api/domains/:id catch-all)
 app.use('/api/domains/:id/landers', require('./api/domains/landers'));
