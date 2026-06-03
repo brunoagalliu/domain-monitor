@@ -7,7 +7,7 @@ const { ensureLanderInStream } = require('../../lib/rotator');
 const { requireAuth } = require('../../lib/auth');
 
 const router = express.Router({ mergeParams: true });
-const LANDERS_DIR = path.join(__dirname, '../../landers');
+const LANDERS_DIR = process.env.LANDERS_DIR || path.join(__dirname, '../../landers');
 
 router.use((req, res, next) => {
   if (!requireAuth(req, res)) return;

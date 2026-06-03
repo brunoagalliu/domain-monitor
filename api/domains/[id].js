@@ -4,7 +4,7 @@ const { requireAuth } = require('../../lib/auth');
 const { uploadLander } = require('../../lib/cpanel');
 const path = require('path');
 
-const LANDERS_DIR = path.join(__dirname, '../../landers');
+const LANDERS_DIR = process.env.LANDERS_DIR || path.join(__dirname, '../../landers');
 
 // Map incoming field names from rotator frontend → actual DB column names
 const FIELD_MAP = {
