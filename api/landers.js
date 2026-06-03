@@ -74,12 +74,39 @@ router.post('/', upload.single('file'), async (req, res) => {
   }
 });
 
-router.patch('/:id', async (req, res) => {
-  const { category } = req.body;
+// POST /api/landers/cpanel — create lander pointing to existing cPanel path
+router.post('/cpanel', async (req, res) => {
+  const { name, cpanel_path } = req.body;
+  if (!name || !cpanel_path) return res.status(400).json({ message: 'name and cpanel_path are required' });
   try {
+    const folder = name.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
     const { rows: [row] } = await pool.query(
-      `UPDATE landers SET category = $1 WHERE id = $2 RETURNING *`,
-      [category || null, req.params.id]
+      `INSERT INTO landers (name, folder, cpanel_path)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (folder) DO UPDATE SET name = $1, cpanel_path = $3, created_at = NOW()
+       RETURNING *`,
+      [name, folder, cpanel_path.trim()]
+    );
+    res.status(201).json(row);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.patch('/:id', async (req, res) => {
+  const { category, cpanel_path, name } = req.body;
+  try {
+    const sets = [];
+    const vals = [];
+    let idx = 1;
+    if ('category'    in req.body) { sets.push(`category = $${idx++}`);    vals.push(category || null); }
+    if ('cpanel_path' in req.body) { sets.push(`cpanel_path = $${idx++}`); vals.push(cpanel_path || null); }
+    if ('name'        in req.body) { sets.push(`name = $${idx++}`);        vals.push(name || null); }
+    if (sets.length === 0) return res.status(400).json({ message: 'Nothing to update' });
+    vals.push(req.params.id);
+    const { rows: [row] } = await pool.query(
+      `UPDATE landers SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
+      vals
     );
     if (!row) return res.status(404).json({ message: 'Not found.' });
     res.json(row);

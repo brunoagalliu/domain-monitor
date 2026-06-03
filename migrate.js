@@ -199,6 +199,10 @@ const migrations = [
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )
     `
+  },
+  {
+    name: 'Add cpanel_path to landers',
+    sql: `ALTER TABLE landers ADD COLUMN IF NOT EXISTS cpanel_path TEXT DEFAULT NULL`
   }
 ];
 

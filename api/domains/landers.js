@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const axios = require('axios');
 const { pool } = require('../../db');
-const { uploadLander } = require('../../lib/cpanel');
+const { uploadLander, copyCpanelDir } = require('../../lib/cpanel');
 const { ensureLanderInStream } = require('../../lib/rotator');
 const { requireAuth } = require('../../lib/auth');
 
@@ -116,7 +116,8 @@ router.post('/:dlId/deploy', async (req, res) => {
     const { rows: [dl] } = await pool.query(
       `SELECT dl.*,
          COALESCE(dl.subdirectory, dl.sub_directory, '') AS subdirectory,
-         l.folder AS lander_folder, d.doc_root, d.domain
+         l.folder AS lander_folder, l.cpanel_path AS lander_cpanel_path,
+         d.doc_root, d.domain
        FROM domain_landers dl
        JOIN landers l ON dl.lander_id = l.id
        JOIN domains d ON dl.domain_id = d.id
@@ -126,11 +127,14 @@ router.post('/:dlId/deploy', async (req, res) => {
     if (!dl) return res.status(404).json({ message: 'Not found.' });
     if (!dl.doc_root) return res.status(400).json({ message: `Domain "${dl.domain}" has no cPanel doc root set. Edit the domain to add it.` });
 
-    const targetRoot = dl.subdirectory
-      ? `${dl.doc_root}/${dl.subdirectory}`
-      : dl.doc_root;
+    const targetRoot = dl.subdirectory ? `${dl.doc_root}/${dl.subdirectory}` : dl.doc_root;
 
-    await uploadLander(path.join(LANDERS_DIR, dl.lander_folder), targetRoot);
+    if (dl.lander_cpanel_path) {
+      await copyCpanelDir(dl.lander_cpanel_path, targetRoot);
+    } else {
+      const localPath = path.join(LANDERS_DIR, dl.lander_folder);
+      await uploadLander(localPath, targetRoot);
+    }
     res.json({ ok: true, domain: dl.domain, path: dl.subdirectory || '/' });
   } catch (err) {
     res.status(500).json({ message: err.message });
