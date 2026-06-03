@@ -38,7 +38,7 @@ const STATUS_DOT = {
 
 const PER_PAGE_OPTIONS = [25, 50, 100];
 
-// ── Add Domain form ───────────────────────────────────────────────────────────
+// ── Add Domain modal ──────────────────────────────────────────────────────────
 
 function AddDomainForm({ categories, onAdded }) {
   const [open,       setOpen]       = useState(false);
@@ -47,6 +47,8 @@ function AddDomainForm({ categories, onAdded }) {
   const [categoryId, setCategoryId] = useState('');
   const [saving,     setSaving]     = useState(false);
   const [error,      setError]      = useState('');
+
+  function close() { setOpen(false); setDomain(''); setNotes(''); setCategoryId(''); setError(''); }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -57,51 +59,65 @@ function AddDomainForm({ categories, onAdded }) {
         notes:       notes.trim() || undefined,
         category_id: categoryId ? Number(categoryId) : undefined,
       });
-      setDomain(''); setNotes(''); setCategoryId('');
-      setOpen(false);
+      close();
       onAdded();
     } catch (err) { setError(err.message); }
     finally { setSaving(false); }
   }
 
-  if (!open) {
-    return (
+  return (
+    <>
       <button onClick={() => setOpen(true)}
         className="text-sm bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors font-medium">
         + Add Domain
       </button>
-    );
-  }
 
-  return (
-    <form onSubmit={handleSubmit} className="flex items-end gap-3 flex-wrap">
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">Domain *</label>
-        <input value={domain} onChange={e => setDomain(e.target.value)} required
-          placeholder="example.com" autoFocus
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-52" />
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">Category</label>
-        <select value={categoryId} onChange={e => setCategoryId(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-          <option value="">— none —</option>
-          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">Notes</label>
-        <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional"
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-36" />
-      </div>
-      {error && <p className="text-red-600 text-xs self-center">{error}</p>}
-      <button type="submit" disabled={saving || !domain.trim()}
-        className="text-sm bg-indigo-600 text-white px-4 py-1.5 rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors">
-        {saving ? 'Adding…' : 'Add'}
-      </button>
-      <button type="button" onClick={() => setOpen(false)}
-        className="text-sm text-gray-500 hover:text-gray-700 px-2 py-1.5">Cancel</button>
-    </form>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          onClick={e => e.target === e.currentTarget && close()}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="text-base font-semibold text-gray-900">Add Domain to Monitor</h2>
+              <button onClick={close} className="text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none">&times;</button>
+            </div>
+            <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">Domain <span className="text-red-400">*</span></label>
+                <input value={domain} onChange={e => setDomain(e.target.value)} required
+                  placeholder="example.com" autoFocus
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">Category</label>
+                <select value={categoryId} onChange={e => setCategoryId(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white">
+                  <option value="">— none —</option>
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">Notes</label>
+                <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+              </div>
+              {error && (
+                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+              )}
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={close}
+                  className="flex-1 px-4 py-2.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                  Cancel
+                </button>
+                <button type="submit" disabled={saving || !domain.trim()}
+                  className="flex-1 px-4 py-2.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors font-medium">
+                  {saving ? 'Adding…' : 'Add Domain'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
