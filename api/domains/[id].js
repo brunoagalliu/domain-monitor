@@ -93,6 +93,7 @@ module.exports = async (req, res) => {
       const domain = domains[0];
       if (!domain) return res.status(404).json({ message: 'Domain not found.' });
       if (!domain.lander_folder) return res.status(400).json({ message: 'No lander assigned to this domain.' });
+      if (!domain.doc_root) return res.status(400).json({ message: `Domain "${domain.domain}" has no cPanel doc root set. Edit the domain to add it.` });
 
       await uploadLander(path.join(LANDERS_DIR, domain.lander_folder), domain.doc_root);
       res.json({ ok: true, domain: domain.domain });

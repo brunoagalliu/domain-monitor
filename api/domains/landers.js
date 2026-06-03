@@ -124,6 +124,7 @@ router.post('/:dlId/deploy', async (req, res) => {
       [req.params.dlId, req.params.id]
     );
     if (!dl) return res.status(404).json({ message: 'Not found.' });
+    if (!dl.doc_root) return res.status(400).json({ message: `Domain "${dl.domain}" has no cPanel doc root set. Edit the domain to add it.` });
 
     const targetRoot = dl.subdirectory
       ? `${dl.doc_root}/${dl.subdirectory}`
