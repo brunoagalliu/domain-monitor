@@ -178,7 +178,7 @@ export default function FilesPage() {
   const [treeKey,      setTreeKey]      = useState(0);
   const [newName,      setNewName]      = useState('');
   const [newType,      setNewType]      = useState(null); // 'file' | 'dir'
-  const [lineWrap,     setLineWrap]     = useState(false);
+  const [lineWrap,     setLineWrap]     = useState(true);
   const uploadRef = useRef(null);
 
   useEffect(() => {
