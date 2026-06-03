@@ -428,6 +428,22 @@ function LandersSubRow({ domain, allLanders, onChanged }) {
   );
 }
 
+const CF_STATUS_STYLE = {
+  active:  { dot: 'bg-orange-400', label: 'CF active' },
+  pending: { dot: 'bg-yellow-400', label: 'CF pending' },
+};
+
+function CfBadge({ zone }) {
+  if (!zone) return null;
+  const style = CF_STATUS_STYLE[zone.status] || { dot: 'bg-gray-300', label: `CF ${zone.status}` };
+  return (
+    <span title={style.label} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-50 text-orange-600 border border-orange-100">
+      <span className={`w-1.5 h-1.5 rounded-full ${style.dot} shrink-0`} />
+      CF
+    </span>
+  );
+}
+
 const STATUS_TABS = ['all', 'active', 'standby', 'banned'];
 const TYPE_TABS   = [
   { key: 'all',        label: 'All types' },
@@ -453,6 +469,7 @@ export default function DomainsPage() {
   const [perPage,   setPerPage]   = useState(25);
   const [sortKey,   setSortKey]   = useState('domain');
   const [sortDir,   setSortDir]   = useState('asc');
+  const [cfZones,   setCfZones]   = useState({});
 
   const load = useCallback(async () => {
     try {
@@ -462,6 +479,16 @@ export default function DomainsPage() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    api.get('/cloudflare/zones')
+      .then(zones => {
+        const map = {};
+        (zones || []).forEach(z => { map[z.name] = z; });
+        setCfZones(map);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -696,6 +723,7 @@ export default function DomainsPage() {
                     <div className="flex items-center gap-1.5">
                       <span className="font-mono text-xs text-gray-800">{d.domain}</span>
                       <TypeBadge type={d.domain_type} />
+                      <CfBadge zone={cfZones[d.domain]} />
                     </div>
                   </td>
                   <td className="px-3 py-2">
