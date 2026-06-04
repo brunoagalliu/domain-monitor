@@ -44,27 +44,36 @@ function SslBadge({ ssl }) {
   );
 }
 
-export default function DomainHealthModal({ domain, cfZone, onClose }) {
-  const [cfDetails, setCfDetails]   = useState(null);
-  const [cfLoading, setCfLoading]   = useState(false);
-  const [gscStatus, setGscStatus]   = useState(null);
-  const [gscSites,  setGscSites]    = useState(null);
-  const [gscError,  setGscError]    = useState('');
-  const [verifying, setVerifying]   = useState(false);
-  const [recovery,  setRecovery]    = useState(null);
-  const [note,      setNote]        = useState('');
-  const [adding,    setAdding]      = useState(false);
-  const [clearing,  setClearing]    = useState(false);
+export default function DomainHealthModal({ domain, cfZone: cfZoneProp, onClose }) {
+  const [cfZone,    setCfZone]     = useState(cfZoneProp || null);
+  const [cfDetails, setCfDetails]  = useState(null);
+  const [cfLoading, setCfLoading]  = useState(false);
+  const [gscStatus, setGscStatus]  = useState(null);
+  const [gscSites,  setGscSites]   = useState(null);
+  const [gscError,  setGscError]   = useState('');
+  const [verifying, setVerifying]  = useState(false);
+  const [recovery,  setRecovery]   = useState(null);
+  const [note,      setNote]       = useState('');
+  const [adding,    setAdding]     = useState(false);
+  const [clearing,  setClearing]   = useState(false);
 
   useEffect(() => {
-    // Load CF SSL details
-    if (cfZone?.id) {
-      setCfLoading(true);
-      api.get(`/cloudflare/zones/${cfZone.id}`)
-        .then(data => setCfDetails(data))
-        .catch(() => {})
-        .finally(() => setCfLoading(false));
-    }
+    // If zone wasn't pre-loaded, look it up directly
+    const zonePromise = cfZoneProp
+      ? Promise.resolve(cfZoneProp)
+      : api.get(`/cloudflare/domain/${domain.domain}`).catch(() => null);
+
+    zonePromise.then(zone => {
+      if (zone) {
+        setCfZone(zone);
+        setCfLoading(true);
+        api.get(`/cloudflare/zones/${zone.id}`)
+          .then(data => setCfDetails(data))
+          .catch(() => {})
+          .finally(() => setCfLoading(false));
+      }
+    });
+
     // Load GSC status + sites
     api.get('/gsc/status').then(s => {
       setGscStatus(s);
@@ -74,7 +83,7 @@ export default function DomainHealthModal({ domain, cfZone, onClose }) {
     }).catch(() => setGscStatus({ connected: false }));
     // Load recovery
     api.get(`/recovery/${domain.id}`).then(setRecovery).catch(() => setRecovery({ recovery_status: null, logs: [] }));
-  }, [domain.id, cfZone]);
+  }, [domain.id]);
 
   const isInGsc = gscSites?.some(s =>
     s.siteUrl === `sc-domain:${domain.domain}` ||
