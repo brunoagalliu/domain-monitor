@@ -106,6 +106,13 @@ export default function DomainHealthModal({ domain, cfZone: cfZoneProp, onClose 
     }
   }
 
+  async function handleDisconnectGsc() {
+    if (!confirm('Disconnect Google account? You will need to reconnect to use GSC features.')) return;
+    await api.delete('/gsc/disconnect').catch(() => {});
+    setGscStatus({ connected: false });
+    setGscSites(null);
+  }
+
   async function handleAddLog(status) {
     setAdding(true);
     try {
@@ -181,18 +188,22 @@ export default function DomainHealthModal({ domain, cfZone: cfZoneProp, onClose 
             ) : gscSites === null ? (
               <p className="text-xs text-gray-400">Loading GSC sites…</p>
             ) : isInGsc ? (
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
-                <span className="text-xs font-medium text-green-700">Verified in GSC</span>
-                <a href={`https://search.google.com/search-console/security-issues?resource_id=sc-domain%3A${domain.domain}`}
-                  target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-indigo-600 hover:underline ml-2">View in GSC →</a>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
+                  <span className="text-xs font-medium text-green-700">Verified in GSC</span>
+                  <a href={`https://search.google.com/search-console/security-issues?resource_id=sc-domain%3A${domain.domain}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-indigo-600 hover:underline ml-2">View in GSC →</a>
+                </div>
+                <button onClick={handleDisconnectGsc} className="text-xs text-gray-400 hover:text-red-500 transition-colors">Disconnect Google</button>
               </div>
             ) : (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-gray-300 shrink-0" />
                   <span className="text-xs text-gray-500">Not in GSC</span>
+                  <button onClick={handleDisconnectGsc} className="text-xs text-gray-400 hover:text-red-500 transition-colors ml-2">Disconnect</button>
                 </div>
                 {!cfZone ? (
                   <p className="text-xs text-gray-400">Cloudflare zone required for auto-verification.</p>

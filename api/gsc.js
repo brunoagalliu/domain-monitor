@@ -7,7 +7,7 @@ const router = express.Router();
 
 const SCOPES = [
   'https://www.googleapis.com/auth/siteverification',
-  'https://www.googleapis.com/auth/webmasters.readonly',
+  'https://www.googleapis.com/auth/webmasters',
 ].join(' ');
 
 function appUrl() {
@@ -149,8 +149,10 @@ router.post('/verify', authMiddleware, async (req, res) => {
       gscSite: verifyData,
     });
   } catch (err) {
-    const msg = err.response?.data?.error?.message || err.response?.data?.error || err.message;
-    res.status(500).json({ error: msg });
+    const detail = err.response?.data;
+    const msg = detail?.error?.message || detail?.error || err.message;
+    console.error('[gsc verify error]', JSON.stringify(detail || err.message));
+    res.status(500).json({ error: msg, detail });
   }
 });
 
