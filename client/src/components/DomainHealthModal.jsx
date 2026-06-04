@@ -199,7 +199,7 @@ export default function DomainHealthModal({ domain, cfZone: cfZoneProp, onClose 
                 ) : (
                   <button onClick={handleVerify} disabled={verifying}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors">
-                    {verifying ? 'Verifying…' : 'Add & Verify via Cloudflare DNS'}
+                    {verifying ? 'Adding DNS & waiting for propagation…' : 'Add & Verify via Cloudflare DNS'}
                   </button>
                 )}
                 {gscError && <p className="text-xs text-red-500">{gscError}</p>}

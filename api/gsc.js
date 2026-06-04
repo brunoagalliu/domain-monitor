@@ -124,14 +124,17 @@ router.post('/verify', authMiddleware, async (req, res) => {
       { headers: cfHeaders }
     );
 
-    // 3. Ask Google to verify
+    // 3. Wait for DNS to propagate before asking Google to verify
+    await new Promise(r => setTimeout(r, 8000));
+
+    // 4. Ask Google to verify
     const { data: verifyData } = await axios.post(
       `https://www.googleapis.com/siteVerification/v1/webResource?verificationMethod=DNS_TXT`,
       { site: { type: 'INET_DOMAIN', identifier: domain } },
       { headers: { Authorization: `Bearer ${token}` } }
     );
 
-    // 4. Add as a domain property to Search Console
+    // 5. Add as a domain property to Search Console
     const siteUrl = `sc-domain:${domain}`;
     await axios.put(
       `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}`,
