@@ -35,6 +35,8 @@ app.get('/api/fix/clear-banned-suspension', async (req, res) => {
   res.json({ fixed: result.rowCount });
 });
 
+app.get('/api/test', require('./api/test'));
+
 // Domain-landers sub-routes (MUST be before the /api/domains/:id catch-all)
 app.use('/api/domains/:id/landers', require('./api/domains/landers'));
 
