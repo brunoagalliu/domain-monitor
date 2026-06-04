@@ -192,11 +192,20 @@ export default function DomainHealthModal({ domain, cfZone: cfZoneProp, onClose 
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
                   <span className="text-xs font-medium text-green-700">Verified in GSC</span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
                   <a href={`https://search.google.com/search-console/security-issues?resource_id=sc-domain%3A${domain.domain}`}
                     target="_blank" rel="noopener noreferrer"
-                    className="text-xs text-indigo-600 hover:underline ml-2">View in GSC →</a>
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">
+                    View Security Issues →
+                  </a>
+                  <a href={`https://search.google.com/search-console/security-issues/review?resource_id=sc-domain%3A${domain.domain}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+                    Request Review →
+                  </a>
+                  <button onClick={handleDisconnectGsc} className="text-xs text-gray-400 hover:text-red-500 transition-colors">Disconnect</button>
                 </div>
-                <button onClick={handleDisconnectGsc} className="text-xs text-gray-400 hover:text-red-500 transition-colors">Disconnect Google</button>
               </div>
             ) : (
               <div className="space-y-2">
