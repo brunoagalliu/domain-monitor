@@ -349,7 +349,7 @@ class DomainMonitor {
     }
   }
 
-  // Manual scan for a suspended domain — called by user after external cleanup
+  // Manual scan for a flagged or suspended domain — called by user after external cleanup
   async manualScanDomain(domainId) {
     const [rows] = await db.execute(
       `SELECT d.*, c.name as category_name, c.color as category_color
@@ -360,8 +360,8 @@ class DomainMonitor {
     if (!rows.length) throw new Error('Domain not found');
     const domain = rows[0];
 
-    if (!domain.scan_suspended) {
-      throw new Error('Domain is not suspended');
+    if (!domain.scan_suspended && !domain.is_flagged) {
+      throw new Error('Domain is not flagged or suspended');
     }
 
     console.log(`\n🔬 Manual scan for ${domain.domain}...`);

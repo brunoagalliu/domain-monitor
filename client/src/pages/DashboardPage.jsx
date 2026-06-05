@@ -212,7 +212,7 @@ function AlertStrip({ flaggedDomains, scanning, onScan }) {
               {d.category_name && (
                 <span className="text-xs text-gray-400 shrink-0 hidden md:block">{d.category_name}</span>
               )}
-              {d.scan_suspended && (
+              {(d.scan_suspended || d.is_flagged) && (
                 <button onClick={e => { e.stopPropagation(); onScan(d); }} disabled={scanning === d.id}
                   className="text-xs px-2.5 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 transition-colors shrink-0">
                   {scanning === d.id ? '…' : 'Re-scan'}
@@ -515,7 +515,7 @@ export default function DashboardPage() {
                   </td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-1.5">
-                      {d.scan_suspended && (
+                      {(d.scan_suspended || d.is_flagged) && (
                         <button onClick={() => submitForScan(d)} disabled={scanning === d.id}
                           className="text-xs px-2 py-0.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 transition-colors">
                           {scanning === d.id ? '…' : 'Re-scan'}
