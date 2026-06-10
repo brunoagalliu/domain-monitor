@@ -168,7 +168,11 @@ class TelegramNotifier {
       } else {
         msg += `${i + 1}. 🚫 <b>${r.from}</b> → ✅ <b>${r.to}</b>\n`;
       }
-      if (r.funnel)  msg += `   📂 Funnel: ${r.funnel}\n`;
+      if (r.funnel) msg += `   📂 Funnel: ${r.funnel}\n`;
+      if (r.standbyLeft != null) {
+        const emoji = r.standbyLeft === 0 ? '🔴' : r.standbyLeft <= 2 ? '🟡' : '🟢';
+        msg += `   ${emoji} Standby remaining: <b>${r.standbyLeft}</b>\n`;
+      }
       if (r.warning) msg += `   ⚠️ RT: ${r.warning}\n`;
       msg += `\n`;
     });

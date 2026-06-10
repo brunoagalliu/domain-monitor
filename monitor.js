@@ -25,8 +25,16 @@ async function autoRotateNewlyFlagged(newlyFlaggedIds, telegram) {
   for (const c of candidates) {
     try {
       const result = await rotate(c.domain, 'auto_monitor');
-      rotations.push({ from: c.domain, to: result.toDomain, funnel: c.funnel_name, warning: result.rtWarning, directMode: result.directMode });
-      console.log(`[monitor] auto-rotated ${c.domain} → ${result.toDomain || (result.directMode ? 'direct offers' : 'none')}`);
+      // Count remaining standby domains in this funnel after rotation
+      const [standbyRows] = await db.execute(
+        `SELECT COUNT(*) AS cnt FROM domains d
+         JOIN funnels f ON d.funnel_id = f.id
+         WHERE f.name = $1 AND d.rotator_status = 'standby' AND d.is_active = true`,
+        [c.funnel_name]
+      );
+      const standbyLeft = Number(standbyRows[0]?.cnt ?? 0);
+      rotations.push({ from: c.domain, to: result.toDomain, funnel: c.funnel_name, warning: result.rtWarning, directMode: result.directMode, standbyLeft });
+      console.log(`[monitor] auto-rotated ${c.domain} → ${result.toDomain || (result.directMode ? 'direct offers' : 'none')} (${standbyLeft} standby left)`);
     } catch (err) {
       rotations.push({ from: c.domain, to: null, funnel: c.funnel_name, warning: err.message });
       console.error(`[monitor] auto-rotate failed for ${c.domain}:`, err.message);
