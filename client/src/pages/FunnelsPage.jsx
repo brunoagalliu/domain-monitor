@@ -278,6 +278,11 @@ export default function FunnelsPage() {
                 <div className="flex items-center gap-5 text-xs text-gray-500 shrink-0">
                   <span><span className="font-medium text-gray-700">{s.landings?.length ?? 0}</span> lander{s.landings?.length !== 1 ? 's' : ''}</span>
                   <span><span className="font-medium text-gray-700">{s.offers?.length ?? 0}</span> offer{s.offers?.length !== 1 ? 's' : ''}</span>
+                  {localFunnel && (() => {
+                    const standby = Number(localFunnel.standby_count ?? 0);
+                    const color = standby === 0 ? 'text-red-600 font-semibold' : standby <= 2 ? 'text-yellow-600 font-semibold' : 'text-green-600';
+                    return <span className={color}>{standby} standby</span>;
+                  })()}
                 </div>
                 {localFunnel && (
                   <select value={localFunnel.category || ''} onChange={e => handleCategoryChange(localFunnel, e.target.value)}
