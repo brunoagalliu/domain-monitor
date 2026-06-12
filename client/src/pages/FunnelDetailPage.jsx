@@ -265,6 +265,9 @@ function DomainRow({ domain, onRotate, onDelete, onRefresh }) {
           <div className="flex items-center gap-2">
             <span className="font-mono text-sm font-medium text-gray-800 truncate">{domain.domain}</span>
             <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${STATUS_COLORS[domain.status]}`}>{domain.status}</span>
+            {domain.is_priority && (
+              <span title="Priority — browser scanned" className="text-xs px-1.5 py-0.5 rounded font-medium bg-amber-100 text-amber-700">★ Priority</span>
+            )}
           </div>
           {primaryLander ? (
             <div className="flex items-center gap-2 mt-0.5">
