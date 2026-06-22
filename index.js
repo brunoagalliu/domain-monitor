@@ -96,9 +96,32 @@ app.get('/api/browser-status', async (req, res) => {
   res.json({
     scanRunning: monitor.browserScanRunning,
     browserReady: !!monitor.browserChecker.context,
+    browserScanEnabled: await isBrowserScanEnabled(),
     lastError: monitor.browserChecker.lastError || null,
     ...rows[0],
   });
+});
+
+// Browser scanner on/off switch — persisted in settings table
+async function isBrowserScanEnabled() {
+  const { execute } = require('./db');
+  const [rows] = await execute(`SELECT value FROM settings WHERE key = 'browser_scan_enabled'`);
+  return rows.length === 0 || rows[0].value !== 'false';
+}
+
+app.post('/api/browser-status/toggle', async (req, res) => {
+  const { requireAuth } = require('./lib/auth');
+  if (!requireAuth(req, res)) return;
+  const { execute } = require('./db');
+  const { enabled } = req.body;
+  await execute(`
+    INSERT INTO settings (key, value, updated_at) VALUES ('browser_scan_enabled', $1, NOW())
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+  `, [enabled ? 'true' : 'false']);
+  if (!enabled) {
+    await monitor.browserChecker.close().catch(() => {});
+  }
+  res.json({ enabled });
 });
 
 // Monitor status (for sidebar badge)
@@ -207,6 +230,7 @@ cron.schedule('*/2 * * * *', async () => {
 // Cron: Browser scan every 30 seconds (priority domains only — sub-1-minute detection)
 cron.schedule('*/30 * * * * *', async () => {
   try {
+    if (!(await isBrowserScanEnabled())) return;
     await monitor.browserScanDomains();
   } catch (err) {
     console.error('Browser scan error:', err.message);

@@ -31,13 +31,35 @@ function BrowserStatus() {
 
   const dotColor = status.browserReady ? 'bg-green-400' : 'bg-gray-300';
 
+  async function toggle() {
+    const next = !status.browserScanEnabled;
+    if (!next && !confirm('Turn off the browser scanner? This stops real-time Chrome-based detection to save resources.')) return;
+    try {
+      await api.post('/browser-status/toggle', { enabled: next });
+      setStatus(s => ({ ...s, browserScanEnabled: next, browserReady: next ? s.browserReady : false }));
+    } catch {}
+  }
+
   return (
     <div className="mt-4 px-3 py-2 rounded-md bg-gray-50 border border-gray-100">
-      <div className="flex items-center gap-2">
-        <span className={`w-2 h-2 rounded-full ${dotColor} shrink-0`} />
-        <span className="text-xs text-gray-600 font-medium">
-          {status.browserReady ? 'Browser scanner ready' : 'Browser scanner offline'}
-        </span>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full ${dotColor} shrink-0`} />
+          <span className="text-xs text-gray-600 font-medium">
+            {status.browserScanEnabled === false ? 'Browser scanner disabled' : status.browserReady ? 'Browser scanner ready' : 'Browser scanner offline'}
+          </span>
+        </div>
+        <button
+          onClick={toggle}
+          title={status.browserScanEnabled === false ? 'Enable browser scanning' : 'Disable browser scanning'}
+          className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+            status.browserScanEnabled === false ? 'bg-gray-300' : 'bg-green-500'
+          }`}
+        >
+          <span className={`inline-block h-3 w-3 rounded-full bg-white shadow transform transition-transform duration-200 ${
+            status.browserScanEnabled === false ? 'translate-x-0' : 'translate-x-3'
+          }`} />
+        </button>
       </div>
       {status.scanRunning && (
         <p className="text-xs text-blue-500 mt-0.5 pl-4">Scan running…</p>
