@@ -233,7 +233,8 @@ class DomainMonitor {
         );
       }
 
-      if (toSetFlagged.length) await autoRotateNewlyFlagged(toSetFlagged, this.telegram);
+      const toRotateLookup = [...new Set([...toSetFlagged, ...toSuspend])];
+      if (toRotateLookup.length) await autoRotateNewlyFlagged(toRotateLookup, this.telegram);
 
       if (suspendedCount) console.log(`⏸ ${suspendedCount} domain(s) suspended (awaiting manual review)`);
       if (toSuspend.length) console.log(`🔒 ${toSuspend.length} domain(s) newly suspended (confirmed by both methods)`);
@@ -330,7 +331,8 @@ class DomainMonitor {
         ),
       ].filter(Boolean));
 
-      if (toSetFlagged.length) await autoRotateNewlyFlagged(toSetFlagged, this.telegram);
+      const toRotateBrowser = [...new Set([...toSetFlagged, ...toSuspend])];
+      if (toRotateBrowser.length) await autoRotateNewlyFlagged(toRotateBrowser, this.telegram);
 
       if (newDangerous.length) {
         const logRows = newDangerous.map(d => [d.domain, d.category || null, 'browser', 'CHROME_BROWSING']);
