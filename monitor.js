@@ -9,6 +9,22 @@ require('dotenv').config();
 // Fire rotate() on first flag from either scan method for active domains in auto-rotate funnels
 async function autoRotateNewlyFlagged(newlyFlaggedIds, telegram) {
   if (!newlyFlaggedIds.length) return;
+
+  // Standby domains that got flagged → ban + remove from RT stream silently
+  const [standbyCandidates] = await db.execute(
+    `SELECT d.domain FROM domains d
+     WHERE d.id = ANY($1) AND d.rotator_status = 'standby'`,
+    [newlyFlaggedIds]
+  );
+  for (const c of standbyCandidates) {
+    try {
+      await rotate(c.domain, 'auto_monitor');
+      console.log(`[monitor] auto-banned flagged standby ${c.domain} and removed from RT stream`);
+    } catch (err) {
+      console.error(`[monitor] auto-ban failed for standby ${c.domain}:`, err.message);
+    }
+  }
+
   const [candidates] = await db.execute(
     `SELECT d.domain, f.name AS funnel_name
      FROM domains d
