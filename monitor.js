@@ -249,7 +249,10 @@ class DomainMonitor {
         );
       }
 
-      const toRotateLookup = [...new Set([...toSetFlagged, ...toSuspend])];
+      // Include ALL currently lookup-flagged domains (not just newly flagged) so already-flagged
+      // domains that slipped through on prior ticks still get rotated out.
+      const allLookupFlaggedIds = domains.filter(d => !lookupResults[d.domain]?.is_safe).map(d => d.id);
+      const toRotateLookup = [...new Set([...allLookupFlaggedIds, ...toSuspend])];
       if (toRotateLookup.length) await autoRotateNewlyFlagged(toRotateLookup, this.telegram);
 
       if (suspendedCount) console.log(`⏸ ${suspendedCount} domain(s) suspended (awaiting manual review)`);
@@ -347,7 +350,9 @@ class DomainMonitor {
         ),
       ].filter(Boolean));
 
-      const toRotateBrowser = [...new Set([...toSetFlagged, ...toSuspend])];
+      // All domains browser found dangerous this tick (not just newly detected).
+      const allBrowserDangerousIds = domains.filter(d => resultByDomain[d.domain]?.status === 'dangerous').map(d => d.id);
+      const toRotateBrowser = [...new Set([...allBrowserDangerousIds, ...toSuspend])];
       if (toRotateBrowser.length) await autoRotateNewlyFlagged(toRotateBrowser, this.telegram);
 
       if (newDangerous.length) {
