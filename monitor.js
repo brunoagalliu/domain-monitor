@@ -7,6 +7,21 @@ const { rotate } = require('./lib/rotator');
 require('dotenv').config();
 
 // Fire rotate() on first flag from either scan method for active domains in auto-rotate funnels
+// Catch-up: rotate any flagged active/standby domains that weren't caught in the scan loop
+// (e.g. already scan_suspended so excluded from scanning, or flagged before a deploy)
+async function rotateFlaggedCatchUp(telegram) {
+  const [stuck] = await db.execute(
+    `SELECT d.id FROM domains d
+     WHERE d.is_flagged = true
+       AND d.rotator_status IN ('active', 'standby')
+       AND d.is_active = true`
+  );
+  if (stuck.length) {
+    console.log(`[monitor] catch-up: ${stuck.length} flagged domain(s) still active/standby — rotating`);
+    await autoRotateNewlyFlagged(stuck.map(r => r.id), telegram);
+  }
+}
+
 async function autoRotateNewlyFlagged(newlyFlaggedIds, telegram) {
   if (!newlyFlaggedIds.length) return;
 
@@ -254,6 +269,9 @@ class DomainMonitor {
       const allLookupFlaggedIds = domains.filter(d => !lookupResults[d.domain]?.is_safe).map(d => d.id);
       const toRotateLookup = [...new Set([...allLookupFlaggedIds, ...toSuspend])];
       if (toRotateLookup.length) await autoRotateNewlyFlagged(toRotateLookup, this.telegram);
+
+      // Catch-up: handle flagged domains excluded from scan (e.g. scan_suspended)
+      await rotateFlaggedCatchUp(this.telegram);
 
       if (suspendedCount) console.log(`⏸ ${suspendedCount} domain(s) suspended (awaiting manual review)`);
       if (toSuspend.length) console.log(`🔒 ${toSuspend.length} domain(s) newly suspended (confirmed by both methods)`);
