@@ -100,7 +100,12 @@ export default function DomainHealthModal({ domain, cfZone: cfZoneProp, onClose 
       const sites = await api.get('/gsc/sites');
       setGscSites(sites);
     } catch (err) {
-      setGscError(err.message);
+      const msg = err.message || '';
+      setGscError(
+        msg.includes('invalid_grant')
+          ? 'Google token expired — click Disconnect then reconnect your account.'
+          : msg
+      );
     } finally {
       setVerifying(false);
     }
