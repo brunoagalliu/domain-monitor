@@ -238,6 +238,14 @@ export default function FunnelsPage() {
     } catch (err) { alert(err.message); }
   }
 
+  async function handleBrowserScanToggle(funnel) {
+    const next = funnel.browser_scan === false ? true : false;
+    try {
+      await api.patch(`/funnels/${funnel.id}`, { browser_scan: next });
+      setLocalFunnels(prev => prev.map(f => f.id === funnel.id ? { ...f, browser_scan: next } : f));
+    } catch (err) { alert(err.message); }
+  }
+
   async function handleManage(stream) {
     setManaging(stream.id);
     try {
@@ -290,6 +298,15 @@ export default function FunnelsPage() {
                     <option value="">— none —</option>
                     {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
+                )}
+                {localFunnel && (
+                  <button
+                    onClick={() => handleBrowserScanToggle(localFunnel)}
+                    title={localFunnel.browser_scan === false ? 'Browser scan off — click to enable' : 'Browser scan on — click to disable'}
+                    className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${localFunnel.browser_scan === false ? 'bg-gray-300' : 'bg-blue-500'}`}
+                  >
+                    <span className={`inline-block h-3 w-3 rounded-full bg-white shadow transform transition-transform duration-200 ${localFunnel.browser_scan === false ? 'translate-x-0' : 'translate-x-3'}`} />
+                  </button>
                 )}
                 <button onClick={() => setEditingStream(s)} className="text-xs px-3 py-1.5 border border-gray-300 text-gray-600 rounded hover:bg-gray-50 transition-colors font-medium shrink-0">Edit</button>
                 <button onClick={() => handleManage(s)} disabled={managing === s.id}

@@ -102,6 +102,7 @@ router.patch('/:id', async (req, res) => {
   if (redtrack_stream_id !== undefined) { fields.push(`redtrack_stream_id = $${fields.length + 1}`); values.push(redtrack_stream_id || null); }
   if (category !== undefined)           { fields.push(`category = $${fields.length + 1}`);           values.push(category || null); }
   if (auto_rotate !== undefined)        { fields.push(`auto_rotate = $${fields.length + 1}`);        values.push(Boolean(auto_rotate)); }
+  if (req.body.browser_scan !== undefined) { fields.push(`browser_scan = $${fields.length + 1}`); values.push(Boolean(req.body.browser_scan)); }
   if (fields.length === 0) return res.status(400).json({ message: 'No fields to update.' });
   values.push(req.params.id);
   try {

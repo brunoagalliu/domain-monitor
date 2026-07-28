@@ -207,6 +207,10 @@ const migrations = [
   {
     name: 'Add last_lookup_check to domains',
     sql: `ALTER TABLE domains ADD COLUMN IF NOT EXISTS last_lookup_check TIMESTAMP DEFAULT NULL`
+  },
+  {
+    name: 'Add browser_scan to funnels',
+    sql: `ALTER TABLE funnels ADD COLUMN IF NOT EXISTS browser_scan BOOLEAN DEFAULT true`
   }
 ];
 

@@ -127,9 +127,11 @@ class DomainMonitor {
   async getActiveDomains() {
     try {
       const [rows] = await db.execute(
-        `SELECT d.*, c.name as category_name, c.color as category_color
+        `SELECT d.*, c.name as category_name, c.color as category_color,
+                COALESCE(f.browser_scan, true) AS funnel_browser_scan
          FROM domains d
          LEFT JOIN categories c ON d.category_id = c.id
+         LEFT JOIN funnels f ON d.funnel_id = f.id
          WHERE d.is_active = true
          ORDER BY c.name, d.domain`
       );
@@ -311,8 +313,8 @@ class DomainMonitor {
     try {
       const allDomains = await this.getActiveDomains();
 
-      // Only scan priority domains that aren't suspended or banned
-      const domains = allDomains.filter(d => d.is_priority && !d.scan_suspended && d.rotator_status !== 'banned');
+      // Only scan priority domains that aren't suspended or banned, and whose funnel has browser scan on
+      const domains = allDomains.filter(d => d.is_priority && !d.scan_suspended && d.rotator_status !== 'banned' && d.funnel_browser_scan !== false);
 
       if (!domains.length) {
         return; // silent — no priority domains configured yet
