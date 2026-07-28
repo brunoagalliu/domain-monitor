@@ -349,16 +349,18 @@ export default function DashboardPage() {
 
       {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           {[
-            { label: 'Total',     value: stats.total_domains },
-            { label: 'Flagged',   value: stats.flagged_domains,   color: 'text-red-600' },
-            { label: 'Priority',  value: stats.priority_domains ?? domains.filter(d => d.is_priority).length, color: 'text-indigo-600' },
-            { label: 'Suspended', value: stats.suspended_domains, color: 'text-orange-600' },
+            { label: 'Total',         value: stats.total_domains },
+            { label: 'Flagged',       value: stats.flagged_domains,   color: 'text-red-600' },
+            { label: 'Suspended',     value: stats.suspended_domains, color: 'text-orange-600' },
+            { label: 'Priority',      value: stats.priority_domains ?? domains.filter(d => d.is_priority).length, color: 'text-indigo-600' },
+            { label: 'Browser Scan',  value: browser?.priority ?? 0,  color: 'text-blue-600', sub: browser?.browserScanEnabled === false ? 'disabled' : browser?.scanRunning ? 'scanning…' : null },
           ].map(s => (
             <div key={s.label} className="bg-white rounded-lg border border-gray-200 px-5 py-4">
               <p className="text-xs text-gray-500 mb-1">{s.label}</p>
               <p className={`text-2xl font-bold ${s.color || 'text-gray-900'}`}>{s.value ?? 0}</p>
+              {s.sub && <p className="text-xs text-gray-400 mt-0.5">{s.sub}</p>}
             </div>
           ))}
         </div>
