@@ -355,7 +355,7 @@ export default function DashboardPage() {
             { label: 'Flagged',       value: stats.flagged_domains,   color: 'text-red-600' },
             { label: 'Suspended',     value: stats.suspended_domains, color: 'text-orange-600' },
             { label: 'Priority',      value: stats.priority_domains ?? domains.filter(d => d.is_priority).length, color: 'text-indigo-600' },
-            { label: 'Browser Scan',  value: browser?.priority ?? 0,  color: 'text-blue-600', sub: browser?.browserScanEnabled === false ? 'disabled' : browser?.scanRunning ? 'scanning…' : null },
+            { label: 'Browser Scan',  value: browser?.browser_scan_active ?? 0,  color: 'text-blue-600', sub: browser?.browserScanEnabled === false ? 'disabled' : browser?.scanRunning ? 'scanning…' : null },
           ].map(s => (
             <div key={s.label} className="bg-white rounded-lg border border-gray-200 px-5 py-4">
               <p className="text-xs text-gray-500 mb-1">{s.label}</p>

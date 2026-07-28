@@ -70,7 +70,7 @@ function BrowserStatus() {
         </p>
       )}
       <p className="text-xs text-gray-400 mt-0.5 pl-4">
-        {status.priority} priority · {status.suspended} suspended
+        {status.browser_scan_active ?? status.priority} active · {status.suspended} suspended
       </p>
     </div>
   );

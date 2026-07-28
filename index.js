@@ -88,8 +88,9 @@ app.get('/api/browser-status', async (req, res) => {
       COUNT(*) FILTER (WHERE last_browser_check IS NOT NULL)::int AS checked,
       COUNT(*) FILTER (WHERE browser_status = 'safe')::int            AS safe,
       COUNT(*) FILTER (WHERE browser_status = 'dangerous')::int       AS dangerous,
-      COUNT(*) FILTER (WHERE is_priority = true)::int                 AS priority,
-      COUNT(*) FILTER (WHERE scan_suspended = true)::int              AS suspended,
+      COUNT(*) FILTER (WHERE is_priority = true)::int                                                          AS priority,
+      COUNT(*) FILTER (WHERE is_priority = true AND scan_suspended = false AND rotator_status != 'banned')::int AS browser_scan_active,
+      COUNT(*) FILTER (WHERE scan_suspended = true)::int                                                        AS suspended,
       MAX(last_browser_check)                                          AS last_check
     FROM domains WHERE is_active = true
   `);
