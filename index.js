@@ -88,11 +88,18 @@ app.get('/api/browser-status', async (req, res) => {
       COUNT(*) FILTER (WHERE last_browser_check IS NOT NULL)::int AS checked,
       COUNT(*) FILTER (WHERE browser_status = 'safe')::int            AS safe,
       COUNT(*) FILTER (WHERE browser_status = 'dangerous')::int       AS dangerous,
-      COUNT(*) FILTER (WHERE is_priority = true)::int                                                          AS priority,
-      COUNT(*) FILTER (WHERE is_priority = true AND scan_suspended = false AND rotator_status != 'banned')::int AS browser_scan_active,
-      COUNT(*) FILTER (WHERE scan_suspended = true)::int                                                        AS suspended,
-      MAX(last_browser_check)                                          AS last_check
-    FROM domains WHERE is_active = true
+      COUNT(*) FILTER (WHERE is_priority = true)::int                 AS priority,
+      COUNT(*) FILTER (WHERE
+        d.is_priority = true
+        AND d.scan_suspended = false
+        AND d.rotator_status != 'banned'
+        AND COALESCE(f.browser_scan, true) = true
+      )::int AS browser_scan_active,
+      COUNT(*) FILTER (WHERE scan_suspended = true)::int              AS suspended,
+      MAX(last_browser_check)                                         AS last_check
+    FROM domains d
+    LEFT JOIN funnels f ON d.funnel_id = f.id
+    WHERE d.is_active = true
   `);
   res.json({
     scanRunning: monitor.browserScanRunning,
