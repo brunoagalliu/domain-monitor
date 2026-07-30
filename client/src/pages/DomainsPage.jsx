@@ -454,6 +454,111 @@ const TYPE_TABS   = [
 ];
 const PER_PAGE_OPTIONS = [25, 50, 100];
 
+const PROVISION_STEPS = [
+  { key: 'cloudflare_zone',    label: 'Add to Cloudflare' },
+  { key: 'dns_a_record',       label: 'Set A record' },
+  { key: 'origin_certificate', label: 'Generate SSL origin certificate' },
+  { key: 'cpanel_domain',      label: 'Add domain in cPanel' },
+  { key: 'cpanel_ssl',         label: 'Install SSL in cPanel' },
+];
+
+function ProvisionModal({ onClose, onProvisioned }) {
+  const [domain, setDomain] = useState('');
+  const [running, setRunning] = useState(false);
+  const [steps, setSteps] = useState([]);
+  const [result, setResult] = useState(null);
+
+  async function run() {
+    if (!domain.trim()) return;
+    setRunning(true);
+    setSteps([]);
+    setResult(null);
+    try {
+      const data = await api.post('/provision', { domain: domain.trim().toLowerCase() });
+      setSteps(data.steps || []);
+      setResult(data);
+    } catch (err) {
+      setResult({ success: false, error: err.message });
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  function stepStatus(key) {
+    return steps.find(s => s.step === key);
+  }
+
+  function StepIcon({ s }) {
+    if (!s) return <span className="w-5 h-5 rounded-full border-2 border-gray-200 inline-block" />;
+    if (s.status === 'error') return <span className="text-red-500 font-bold">✕</span>;
+    if (s.status === 'skipped') return <span className="text-yellow-500">—</span>;
+    return <span className="text-green-500 font-bold">✓</span>;
+  }
+
+  return (
+    <Modal title="Provision New Domain" onClose={onClose}>
+      <div className="space-y-4">
+        <div className="flex gap-2">
+          <input
+            value={domain}
+            onChange={e => setDomain(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && !running && run()}
+            placeholder="example.com"
+            disabled={running}
+            className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50"
+          />
+          <button onClick={run} disabled={running || !domain.trim()}
+            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+            {running ? 'Running…' : 'Provision'}
+          </button>
+        </div>
+
+        {(running || steps.length > 0) && (
+          <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
+            {PROVISION_STEPS.map(({ key, label }) => {
+              const s = stepStatus(key);
+              const pending = !s && running;
+              return (
+                <div key={key} className="flex items-center gap-3 px-4 py-3">
+                  <div className="w-5 text-center shrink-0">
+                    {pending ? <span className="inline-block w-3 h-3 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin" /> : <StepIcon s={s} />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm ${s?.status === 'error' ? 'text-red-600' : 'text-gray-700'}`}>{label}</p>
+                    {s?.error && <p className="text-xs text-red-500 mt-0.5 truncate">{s.error}</p>}
+                    {s?.ip && <p className="text-xs text-gray-400 mt-0.5">→ {s.ip}</p>}
+                  </div>
+                  {s && <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${
+                    s.status === 'error'   ? 'bg-red-100 text-red-700' :
+                    s.status === 'exists'  ? 'bg-gray-100 text-gray-500' :
+                    s.status === 'skipped' ? 'bg-yellow-50 text-yellow-600' :
+                    'bg-green-100 text-green-700'
+                  }`}>{s.status}</span>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {result?.success && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-800">
+            <p className="font-semibold mb-1">Domain provisioned successfully</p>
+            {result.docRoot && <p className="text-xs text-green-700 font-mono">{result.docRoot}</p>}
+            <button onClick={() => { onProvisioned?.(domain.trim()); onClose(); }}
+              className="mt-3 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition-colors">
+              Add to Monitor →
+            </button>
+          </div>
+        )}
+
+        {result && !result.success && !steps.length && (
+          <p className="text-sm text-red-600">{result.error}</p>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 export default function DomainsPage() {
   const navigate = useNavigate();
   const [domains,   setDomains]   = useState([]);
@@ -472,6 +577,7 @@ export default function DomainsPage() {
   const [sortDir,     setSortDir]     = useState('asc');
   const [cfZones,     setCfZones]     = useState({});
   const [healthDomain, setHealthDomain] = useState(null);
+  const [showProvision, setShowProvision] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -616,10 +722,16 @@ export default function DomainsPage() {
             <span className="text-red-600 font-medium">{counts.banned || 0} banned</span>
           </div>
         </div>
-        <button onClick={() => setModal('add')}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700 transition-colors">
-          + Add Domain
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowProvision(true)}
+            className="bg-white border border-indigo-300 text-indigo-600 px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-50 transition-colors">
+            ⚡ Provision Domain
+          </button>
+          <button onClick={() => setModal('add')}
+            className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700 transition-colors">
+            + Add Domain
+          </button>
+        </div>
       </div>
 
       {/* Toolbar */}
@@ -828,6 +940,15 @@ export default function DomainsPage() {
           domain={healthDomain}
           cfZone={cfZones[healthDomain.domain] || null}
           onClose={() => setHealthDomain(null)}
+        />
+      )}
+
+      {showProvision && (
+        <ProvisionModal
+          onClose={() => setShowProvision(false)}
+          onProvisioned={provisionedDomain => {
+            setModal({ domain: provisionedDomain });
+          }}
         />
       )}
     </div>

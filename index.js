@@ -25,6 +25,7 @@ app.use('/api/files', require('./api/files'));
 app.use('/api/cloudflare', require('./api/cloudflare'));
 app.use('/api/recovery',  require('./api/recovery'));
 app.use('/api/gsc',       require('./api/gsc'));
+app.use('/api/provision', require('./api/provision'));
 
 // One-time fix: clear scan_suspended on manually-banned domains
 app.get('/api/fix/clear-banned-suspension', async (req, res) => {
