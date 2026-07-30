@@ -32,6 +32,17 @@ function cfErr(err) {
   return err.response?.data?.errors?.[0]?.message || err.message;
 }
 
+// Split domain into SLD + TLD for Namecheap API (handles common 2-part TLDs)
+function parseDomain(domain) {
+  const parts = domain.split('.');
+  const known2part = new Set(['co.uk','com.au','net.au','org.au','com.br','co.nz','org.uk','me.uk','net.uk','co.in','com.mx']);
+  const last2 = parts.slice(-2).join('.');
+  if (parts.length > 2 && known2part.has(last2)) {
+    return { sld: parts.slice(0, -2).join('.'), tld: last2 };
+  }
+  return { sld: parts.slice(0, -1).join('.'), tld: parts[parts.length - 1] };
+}
+
 // POST /api/provision — run all 5 setup steps for a new domain
 router.post('/', async (req, res) => {
   const { domain } = req.body;
@@ -47,6 +58,8 @@ router.post('/', async (req, res) => {
 
   // ── Step 1: Cloudflare zone ───────────────────────────────────────────────
   let zoneId;
+  let zoneCreated = false;
+  let cfNameservers = [];
   try {
     const { data: existing } = await client.get('/zones', {
       params: { name: domain, account_id: process.env.CLOUDFLARE_ACCOUNT_ID },
@@ -61,8 +74,9 @@ router.post('/', async (req, res) => {
         jump_start: false,
       });
       zoneId = created.result.id;
-      const nameservers = created.result.name_servers || [];
-      log('cloudflare_zone', 'created', { zoneId, nameservers });
+      cfNameservers = created.result.name_servers || [];
+      zoneCreated = true;
+      log('cloudflare_zone', 'created', { zoneId, nameservers: cfNameservers });
     }
   } catch (err) {
     log('cloudflare_zone', 'error', { error: cfErr(err) });
@@ -141,13 +155,51 @@ router.post('/', async (req, res) => {
     log('cpanel_ssl', 'error', { error: err.message });
   }
 
+  // ── Step 5: Namecheap nameservers (only when CF zone was just created) ────
+  if (!zoneCreated) {
+    log('namecheap_ns', 'skipped');
+  } else {
+    const ncUser = process.env.NAMECHEAP_API_USER;
+    const ncKey  = process.env.NAMECHEAP_API_KEY;
+    const ncIp   = process.env.NAMECHEAP_CLIENT_IP;
+
+    if (!ncUser || !ncKey || !ncIp) {
+      log('namecheap_ns', 'skipped', { nameservers: cfNameservers });
+    } else {
+      try {
+        const { sld, tld } = parseDomain(domain);
+        const { data: xml } = await axios.get('https://api.namecheap.com/xml.response', {
+          params: {
+            ApiUser:     ncUser,
+            ApiKey:      ncKey,
+            UserName:    ncUser,
+            ClientIp:    ncIp,
+            Command:     'namecheap.domains.dns.setCustom',
+            SLD:         sld,
+            TLD:         tld,
+            Nameservers: cfNameservers.join(','),
+          },
+          timeout: 30000,
+          responseType: 'text',
+        });
+
+        const status = (/<ApiResponse[^>]*Status="(\w+)"/).exec(xml)?.[1];
+        if (status === 'OK') {
+          log('namecheap_ns', 'updated', { nameservers: cfNameservers });
+        } else {
+          const errMsg = (/<Error[^>]*>([\s\S]*?)<\/Error>/).exec(xml)?.[1]?.trim() || 'Unknown error';
+          log('namecheap_ns', 'error', { error: errMsg, nameservers: cfNameservers });
+        }
+      } catch (err) {
+        log('namecheap_ns', 'error', { error: err.message, nameservers: cfNameservers });
+      }
+    }
+  }
+
   const homeDir = process.env.CPANEL_HOME || `/home/${process.env.CPANEL_USER}`;
   const fullDocRoot = `${homeDir}/public_html/${domain}`;
 
-  const zoneStep = steps.find(s => s.step === 'cloudflare_zone');
-  const nameservers = zoneStep?.status === 'created' ? (zoneStep.nameservers || []) : [];
-
-  res.json({ domain, steps, success: true, docRoot: fullDocRoot, nameservers, zoneCreated: zoneStep?.status === 'created' });
+  res.json({ domain, steps, success: true, docRoot: fullDocRoot });
 });
 
 module.exports = router;

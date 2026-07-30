@@ -459,6 +459,7 @@ const PROVISION_STEPS = [
   { key: 'dns_a_record',    label: 'Set A record' },
   { key: 'cpanel_domain',   label: 'Add domain in cPanel' },
   { key: 'cpanel_ssl',      label: 'Queue AutoSSL (Let\'s Encrypt)' },
+  { key: 'namecheap_ns',    label: 'Update nameservers in Namecheap' },
 ];
 
 function ProvisionModal({ onClose, onProvisioned }) {
@@ -526,6 +527,9 @@ function ProvisionModal({ onClose, onProvisioned }) {
                     <p className={`text-sm ${s?.status === 'error' ? 'text-red-600' : 'text-gray-700'}`}>{label}</p>
                     {s?.error && <p className="text-xs text-red-500 mt-0.5 truncate">{s.error}</p>}
                     {s?.ip && <p className="text-xs text-gray-400 mt-0.5">→ {s.ip}</p>}
+                    {s?.nameservers?.length > 0 && (
+                      <p className="text-xs text-gray-400 mt-0.5">{s.nameservers.join(', ')}</p>
+                    )}
                   </div>
                   {s && <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${
                     s.status === 'error'   ? 'bg-red-100 text-red-700' :
@@ -539,31 +543,35 @@ function ProvisionModal({ onClose, onProvisioned }) {
           </div>
         )}
 
-        {result?.success && (
-          <div className="space-y-3">
-            {result.zoneCreated && result.nameservers?.length > 0 && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
-                <p className="font-semibold text-amber-800 mb-1">⚠ Update nameservers in Namecheap</p>
-                <p className="text-amber-700 text-xs mb-2">
-                  This domain was newly added to Cloudflare. Point it to Cloudflare by setting these nameservers in your Namecheap account:
-                </p>
-                <div className="space-y-1">
-                  {result.nameservers.map(ns => (
-                    <p key={ns} className="text-xs font-mono bg-amber-100 text-amber-900 px-2 py-1 rounded">{ns}</p>
-                  ))}
+        {result?.success && (() => {
+          const nsStep = result.steps?.find(s => s.step === 'namecheap_ns');
+          const needsManualNs = nsStep && nsStep.status !== 'updated' && nsStep.nameservers?.length > 0;
+          return (
+            <div className="space-y-3">
+              {needsManualNs && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
+                  <p className="font-semibold text-amber-800 mb-1">Action required: update nameservers in Namecheap</p>
+                  <p className="text-amber-700 text-xs mb-2">
+                    Set these nameservers on <strong>{domain}</strong> in your Namecheap account:
+                  </p>
+                  <div className="space-y-1">
+                    {nsStep.nameservers.map(ns => (
+                      <p key={ns} className="text-xs font-mono bg-amber-100 text-amber-900 px-2 py-1 rounded select-all">{ns}</p>
+                    ))}
+                  </div>
                 </div>
+              )}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-800">
+                <p className="font-semibold mb-1">Domain provisioned successfully</p>
+                {result.docRoot && <p className="text-xs text-green-700 font-mono">{result.docRoot}</p>}
+                <button onClick={() => { onProvisioned?.(domain.trim()); onClose(); }}
+                  className="mt-3 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition-colors">
+                  Add to Monitor →
+                </button>
               </div>
-            )}
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-800">
-              <p className="font-semibold mb-1">Domain provisioned successfully</p>
-              {result.docRoot && <p className="text-xs text-green-700 font-mono">{result.docRoot}</p>}
-              <button onClick={() => { onProvisioned?.(domain.trim()); onClose(); }}
-                className="mt-3 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition-colors">
-                Add to Monitor →
-              </button>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {result && !result.success && !steps.length && (
           <p className="text-sm text-red-600">{result.error}</p>
