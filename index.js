@@ -38,6 +38,17 @@ app.get('/api/fix/clear-banned-suspension', async (req, res) => {
 
 app.get('/api/test', require('./api/test'));
 
+app.get('/api/outbound-ip', async (req, res) => {
+  const { default: fetch } = await import('node-fetch').catch(() => ({ default: null }));
+  const get = fetch || (await import('https')).get;
+  try {
+    const r = await require('axios').get('https://api.ipify.org?format=json', { timeout: 5000 });
+    res.json({ ip: r.data.ip });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Domain-landers sub-routes (MUST be before the /api/domains/:id catch-all)
 app.use('/api/domains/:id/landers', require('./api/domains/landers'));
 
