@@ -455,11 +455,10 @@ const TYPE_TABS   = [
 const PER_PAGE_OPTIONS = [25, 50, 100];
 
 const PROVISION_STEPS = [
-  { key: 'cloudflare_zone',    label: 'Add to Cloudflare' },
-  { key: 'dns_a_record',       label: 'Set A record' },
-  { key: 'origin_certificate', label: 'Generate SSL origin certificate' },
-  { key: 'cpanel_domain',      label: 'Add domain in cPanel' },
-  { key: 'cpanel_ssl',         label: 'Install SSL in cPanel' },
+  { key: 'cloudflare_zone', label: 'Add to Cloudflare' },
+  { key: 'dns_a_record',    label: 'Set A record' },
+  { key: 'cpanel_domain',   label: 'Add domain in cPanel' },
+  { key: 'cpanel_ssl',      label: 'Queue AutoSSL (Let\'s Encrypt)' },
 ];
 
 function ProvisionModal({ onClose, onProvisioned }) {

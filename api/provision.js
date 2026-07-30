@@ -93,27 +93,10 @@ router.post('/', async (req, res) => {
     }
   }
 
-  // ── Step 3: Cloudflare origin certificate ─────────────────────────────────
-  let cert, privateKey;
-  try {
-    const { data: certData } = await client.post('/certificates', {
-      hostnames: [domain, `*.${domain}`],
-      request_type: 'origin-rsa',
-      requested_validity: 5475, // 15 years
-    });
-    cert = certData.result.certificate;
-    privateKey = certData.result.private_key;
-    log('origin_certificate', 'created');
-  } catch (err) {
-    log('origin_certificate', 'error', { error: cfErr(err) });
-    return res.json({ domain, steps, success: false });
-  }
-
-  // ── Step 4: cPanel domain ─────────────────────────────────────────────────
+  // ── Step 3: cPanel domain ─────────────────────────────────────────────────
   const cp = cpanel();
-  const docRoot = `public_html/${domain}`; // relative to cPanel home dir
+  const docRoot = `public_html/${domain}`;
   try {
-    // Try newer Domains/create first (cPanel 86+), fall back to AddonDomain
     let addResp;
     try {
       const { data } = await cp.post('/Domains/create', null, {
@@ -143,13 +126,13 @@ router.post('/', async (req, res) => {
     return res.json({ domain, steps, success: false });
   }
 
-  // ── Step 5: Install SSL in cPanel ─────────────────────────────────────────
+  // ── Step 4: AutoSSL (Let's Encrypt via cPanel) ────────────────────────────
   try {
-    const { data: sslResp } = await cp.post('/SSL/install_ssl', null, {
-      params: { domain, cert, key: privateKey },
+    const { data: sslResp } = await cp.post('/SSL/start_autossl_check', null, {
+      params: { 'domains[0]': domain },
     });
     if (sslResp.status === 1) {
-      log('cpanel_ssl', 'installed');
+      log('cpanel_ssl', 'queued');
     } else {
       log('cpanel_ssl', 'error', { error: (sslResp.errors || []).join(', ') });
     }
