@@ -70,7 +70,8 @@ router.post('/', async (req, res) => {
     });
     if (existing.result?.length > 0) {
       zoneId = existing.result[0].id;
-      log('cloudflare_zone', 'exists', { zoneId });
+      cfNameservers = existing.result[0].name_servers || [];
+      log('cloudflare_zone', 'exists', { zoneId, nameservers: cfNameservers });
     } else {
       const { data: created } = await client.post('/zones', {
         name: domain,
@@ -205,10 +206,8 @@ router.post('/', async (req, res) => {
     log('cpanel_ssl', 'error', { error: err.message });
   }
 
-  // ── Step 5: Namecheap nameservers (only when CF zone was just created) ────
-  if (!zoneCreated) {
-    log('namecheap_ns', 'skipped');
-  } else {
+  // ── Step 5: Namecheap nameservers ────────────────────────────────────────
+  {
     const ncUser = process.env.NAMECHEAP_API_USER;
     const ncKey  = process.env.NAMECHEAP_API_KEY;
     const ncIp   = process.env.NAMECHEAP_CLIENT_IP;
