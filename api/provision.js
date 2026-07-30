@@ -117,6 +117,10 @@ router.post('/', async (req, res) => {
       const { data } = await cp.post('/Domains/create', null, {
         params: { domain, document_root: docRoot },
       });
+      // Fall back if the Domains module isn't available on this cPanel version
+      if (data.status !== 1 && (data.errors || []).some(e => /Failed to load module|Can't locate/i.test(e))) {
+        throw new Error('module_unavailable');
+      }
       addResp = data;
     } catch {
       const { data } = await cp.post('/AddonDomain/addaddondomain', null, {
