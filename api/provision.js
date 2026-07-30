@@ -19,13 +19,17 @@ const cf = () => axios.create({
   timeout: 30000,
 });
 
-function cpanel() {
+function cpanel(path = '/execute') {
   return axios.create({
-    baseURL: `https://${process.env.CPANEL_HOST}/execute`,
+    baseURL: `https://${process.env.CPANEL_HOST}${path}`,
     headers: { Authorization: `cpanel ${process.env.CPANEL_USER}:${process.env.CPANEL_TOKEN}` },
     httpsAgent: new https.Agent({ rejectUnauthorized: false }),
     timeout: 60000,
   });
+}
+
+function isCpanelModuleError(errors = []) {
+  return errors.some(e => /Failed to load module|Can't locate/i.test(e));
 }
 
 function cfErr(err) {
@@ -109,36 +113,78 @@ router.post('/', async (req, res) => {
   }
 
   // ── Step 3: cPanel domain ─────────────────────────────────────────────────
-  const cp = cpanel();
+  // Tries three methods in order: UAPI Domains/create → UAPI AddonDomain → API2 AddonDomain
+  const cp   = cpanel('/execute');
+  const cp2  = cpanel('/json-api');
   const docRoot = `public_html/${domain}`;
   try {
-    let addResp;
+    let addResult; // { ok: bool, exists: bool, error: string }
+
+    // Attempt 1: UAPI Domains/create (cPanel 86+)
     try {
       const { data } = await cp.post('/Domains/create', null, {
         params: { domain, document_root: docRoot },
       });
-      // Fall back if the Domains module isn't available on this cPanel version
-      if (data.status !== 1 && (data.errors || []).some(e => /Failed to load module|Can't locate/i.test(e))) {
-        throw new Error('module_unavailable');
+      if (data.status === 1) {
+        addResult = { ok: true };
+      } else if (isCpanelModuleError(data.errors || [])) {
+        // module not available — try next method
+      } else {
+        const msg = (data.errors || []).join(', ');
+        addResult = /already exists|already been added|already configured/i.test(msg)
+          ? { ok: true, exists: true }
+          : { ok: false, error: msg };
       }
-      addResp = data;
-    } catch {
-      const { data } = await cp.post('/AddonDomain/addaddondomain', null, {
-        params: { newdomain: domain, subdomain: domain, dir: docRoot },
-      });
-      addResp = data;
+    } catch { /* HTTP error — try next method */ }
+
+    // Attempt 2: UAPI AddonDomain/addaddondomain
+    if (!addResult) {
+      try {
+        const { data } = await cp.post('/AddonDomain/addaddondomain', null, {
+          params: { newdomain: domain, subdomain: domain, dir: docRoot },
+        });
+        if (data.status === 1) {
+          addResult = { ok: true };
+        } else if (isCpanelModuleError(data.errors || [])) {
+          // module not available — try next method
+        } else {
+          const msg = (data.errors || []).join(', ');
+          addResult = /already exists|already been added|already configured/i.test(msg)
+            ? { ok: true, exists: true }
+            : { ok: false, error: msg };
+        }
+      } catch { /* HTTP error — try next method */ }
     }
 
-    if (addResp.status === 1) {
-      log('cpanel_domain', 'created', { docRoot });
-    } else {
-      const errMsg = (addResp.errors || []).join(', ');
-      if (/already exists|already been added|already configured/i.test(errMsg)) {
-        log('cpanel_domain', 'exists', { docRoot });
+    // Attempt 3: cPanel API2 AddonDomain::addaddondomain
+    if (!addResult) {
+      const { data } = await cp2.get('/cpanel', {
+        params: {
+          cpanel_jsonapi_apiversion: '2',
+          cpanel_jsonapi_module: 'AddonDomain',
+          cpanel_jsonapi_func: 'addaddondomain',
+          newdomain: domain,
+          subdomain: domain,
+          dir: docRoot,
+        },
+      });
+      const r = data?.cpanelresult;
+      const eventOk = r?.event?.result === 1;
+      if (eventOk) {
+        addResult = { ok: true };
       } else {
-        log('cpanel_domain', 'error', { error: errMsg });
-        return res.json({ domain, steps, success: false });
+        const msg = r?.data?.[0]?.reason || r?.error || 'Unknown cPanel error';
+        addResult = /already exists|already been added|already configured/i.test(msg)
+          ? { ok: true, exists: true }
+          : { ok: false, error: msg };
       }
+    }
+
+    if (addResult.ok) {
+      log('cpanel_domain', addResult.exists ? 'exists' : 'created', { docRoot });
+    } else {
+      log('cpanel_domain', 'error', { error: addResult.error });
+      return res.json({ domain, steps, success: false });
     }
   } catch (err) {
     log('cpanel_domain', 'error', { error: err.message });
