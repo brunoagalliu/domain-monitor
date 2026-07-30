@@ -540,13 +540,28 @@ function ProvisionModal({ onClose, onProvisioned }) {
         )}
 
         {result?.success && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-800">
-            <p className="font-semibold mb-1">Domain provisioned successfully</p>
-            {result.docRoot && <p className="text-xs text-green-700 font-mono">{result.docRoot}</p>}
-            <button onClick={() => { onProvisioned?.(domain.trim()); onClose(); }}
-              className="mt-3 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition-colors">
-              Add to Monitor →
-            </button>
+          <div className="space-y-3">
+            {result.zoneCreated && result.nameservers?.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
+                <p className="font-semibold text-amber-800 mb-1">⚠ Update nameservers in Namecheap</p>
+                <p className="text-amber-700 text-xs mb-2">
+                  This domain was newly added to Cloudflare. Point it to Cloudflare by setting these nameservers in your Namecheap account:
+                </p>
+                <div className="space-y-1">
+                  {result.nameservers.map(ns => (
+                    <p key={ns} className="text-xs font-mono bg-amber-100 text-amber-900 px-2 py-1 rounded">{ns}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-800">
+              <p className="font-semibold mb-1">Domain provisioned successfully</p>
+              {result.docRoot && <p className="text-xs text-green-700 font-mono">{result.docRoot}</p>}
+              <button onClick={() => { onProvisioned?.(domain.trim()); onClose(); }}
+                className="mt-3 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition-colors">
+                Add to Monitor →
+              </button>
+            </div>
           </div>
         )}
 

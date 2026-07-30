@@ -61,7 +61,8 @@ router.post('/', async (req, res) => {
         jump_start: false,
       });
       zoneId = created.result.id;
-      log('cloudflare_zone', 'created', { zoneId });
+      const nameservers = created.result.name_servers || [];
+      log('cloudflare_zone', 'created', { zoneId, nameservers });
     }
   } catch (err) {
     log('cloudflare_zone', 'error', { error: cfErr(err) });
@@ -143,7 +144,10 @@ router.post('/', async (req, res) => {
   const homeDir = process.env.CPANEL_HOME || `/home/${process.env.CPANEL_USER}`;
   const fullDocRoot = `${homeDir}/public_html/${domain}`;
 
-  res.json({ domain, steps, success: true, docRoot: fullDocRoot });
+  const zoneStep = steps.find(s => s.step === 'cloudflare_zone');
+  const nameservers = zoneStep?.status === 'created' ? (zoneStep.nameservers || []) : [];
+
+  res.json({ domain, steps, success: true, docRoot: fullDocRoot, nameservers, zoneCreated: zoneStep?.status === 'created' });
 });
 
 module.exports = router;
