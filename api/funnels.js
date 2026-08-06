@@ -197,12 +197,27 @@ router.post('/:id/sync-from-rt', async (req, res) => {
     let updated = 0;
     for (const l of (stream.landings || [])) {
       const newStatus = l.weight >= 1000 ? 'active' : 'standby';
-      const { rowCount } = await pool.query(
-        `UPDATE domains SET rotator_status = $1
-         WHERE redtrack_lander_id = $2 AND funnel_id = $3 AND rotator_status != 'banned'`,
+
+      // Update domain_funnels (source of truth for per-funnel status)
+      const { rowCount: dfRows } = await pool.query(
+        `UPDATE domain_funnels df SET status = $1
+         FROM domains d
+         WHERE df.domain_id = d.id
+           AND df.funnel_id = $3
+           AND d.redtrack_lander_id = $2
+           AND d.rotator_status != 'banned'`,
         [newStatus, String(l.id), req.params.id]
       );
-      updated += rowCount;
+
+      // Keep domains.rotator_status in sync
+      await pool.query(
+        `UPDATE domains SET rotator_status = $1
+         WHERE redtrack_lander_id = $2 AND rotator_status != 'banned'
+           AND EXISTS (SELECT 1 FROM domain_funnels df WHERE df.domain_id = domains.id AND df.funnel_id = $3)`,
+        [newStatus, String(l.id), req.params.id]
+      );
+
+      updated += dfRows;
     }
     res.json({ ok: true, updated });
   } catch (err) {
