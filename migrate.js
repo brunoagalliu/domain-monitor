@@ -211,6 +211,27 @@ const migrations = [
   {
     name: 'Add browser_scan to funnels',
     sql: `ALTER TABLE funnels ADD COLUMN IF NOT EXISTS browser_scan BOOLEAN DEFAULT true`
+  },
+  {
+    name: 'Create domain_funnels many-to-many table',
+    sql: `CREATE TABLE IF NOT EXISTS domain_funnels (
+      id SERIAL PRIMARY KEY,
+      domain_id INT NOT NULL REFERENCES domains(id) ON DELETE CASCADE,
+      funnel_id INT NOT NULL REFERENCES funnels(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'standby',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(domain_id, funnel_id)
+    )`
+  },
+  {
+    name: 'Migrate existing domain-funnel pairs into domain_funnels',
+    sql: `INSERT INTO domain_funnels (domain_id, funnel_id, status)
+      SELECT id, funnel_id, rotator_status
+      FROM domains
+      WHERE funnel_id IS NOT NULL
+        AND rotator_status IN ('active', 'standby')
+        AND is_active = true
+      ON CONFLICT (domain_id, funnel_id) DO NOTHING`
   }
 ];
 

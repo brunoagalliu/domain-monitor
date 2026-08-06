@@ -57,14 +57,10 @@ function AddLanderPicker({ funnelId, streamId, funnelDomains, onSave, onCancel }
     if (!selected) return;
     setSaving(true); setError('');
     try {
-      const body = { funnel_id: funnelId };
-      if (selectedLander?.redtrack_lander_id) body.redtrack_lander_id = selectedLander.redtrack_lander_id;
-      await api.patch(`/domains/${selected.id}`, body);
-      if (streamId && selectedLander?.redtrack_lander_id) {
-        await api.post(`/funnels/${funnelId}/stream-lander`, {
-          rt_lander_id: selectedLander.redtrack_lander_id,
-        }).catch(err => setError(`Added to pool — RT stream update failed: ${err.message}`));
-      }
+      await api.post(`/funnels/${funnelId}/domains`, {
+        domain_id: selected.id,
+        redtrack_lander_id: selectedLander?.redtrack_lander_id || null,
+      });
       onSave();
     } catch (err) { setError(err.message); }
     finally { setSaving(false); }
@@ -76,7 +72,7 @@ function AddLanderPicker({ funnelId, streamId, funnelDomains, onSave, onCancel }
       {loading ? (
         <p className="text-xs text-gray-400">Loading domains...</p>
       ) : allDomains.length === 0 ? (
-        <p className="text-xs text-gray-400 italic">No unassigned domains available.</p>
+        <p className="text-xs text-gray-400 italic">No available domains.</p>
       ) : (
         <>
           <div ref={containerRef} className="relative">
@@ -575,8 +571,8 @@ export default function FunnelDetailPage() {
   useEffect(() => { load(); }, [load]);
 
   async function deleteDomain(domainId, domain) {
-    if (!confirm(`Remove "${domain}" from this funnel? The domain stays in your pool (status: standby).`)) return;
-    await api.patch(`/domains/${domainId}`, { funnel_id: null, status: 'standby' });
+    if (!confirm(`Remove "${domain}" from this funnel? The domain stays in your system (unassigned).`)) return;
+    await api.delete(`/funnels/${id}/domains/${domainId}`);
     load();
   }
 

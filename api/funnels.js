@@ -17,12 +17,12 @@ router.get('/', async (req, res) => {
     const { rows } = await pool.query(`
       SELECT
         f.*,
-        COUNT(DISTINCT d.id) FILTER (WHERE d.rotator_status != 'banned' AND d.is_active = true) AS domain_count,
-        COUNT(DISTINCT d.id) FILTER (WHERE d.role = 'primary' AND d.rotator_status = 'active' AND d.is_active = true) AS is_active,
-        COUNT(DISTINCT d.id) FILTER (WHERE d.rotator_status = 'standby' AND d.is_active = true) AS standby_count,
+        COUNT(DISTINCT df.domain_id) AS domain_count,
+        COUNT(DISTINCT df.domain_id) FILTER (WHERE df.status = 'active') AS is_active,
+        COUNT(DISTINCT df.domain_id) FILTER (WHERE df.status = 'standby') AS standby_count,
         COUNT(DISTINCT fo.id) AS offer_count
       FROM funnels f
-      LEFT JOIN domains d  ON d.funnel_id = f.id
+      LEFT JOIN domain_funnels df ON df.funnel_id = f.id
       LEFT JOIN funnel_offers fo ON fo.funnel_id = f.id
       GROUP BY f.id
       ORDER BY f.created_at DESC
@@ -40,13 +40,14 @@ router.get('/:id', async (req, res) => {
     if (!funnel) return res.status(404).json({ message: 'Not found.' });
 
     const { rows: domains } = await pool.query(
-      `SELECT *,
-         rotator_status AS status,
-         rotator_priority AS priority,
-         created_at AS added_at
-       FROM domains
-       WHERE funnel_id = $1 AND is_active = true
-       ORDER BY role DESC, rotator_priority DESC, created_at ASC`,
+      `SELECT d.*,
+         df.status,
+         d.rotator_priority AS priority,
+         df.created_at AS added_at
+       FROM domains d
+       JOIN domain_funnels df ON df.domain_id = d.id AND df.funnel_id = $1
+       WHERE d.is_active = true
+       ORDER BY df.status = 'active' DESC, d.rotator_priority DESC, df.created_at ASC`,
       [req.params.id]
     );
     const { rows: offers } = await pool.query(
@@ -274,6 +275,95 @@ router.delete('/:id/stream-lander/:rtLanderId', async (req, res) => {
     res.json({ ok: true, direct: updatedLandings.length === 0 });
   } catch (err) {
     res.status(500).json({ message: err.response?.data?.error || err.message });
+  }
+});
+
+// Add domain to funnel pool (many-to-many)
+router.post('/:id/domains', async (req, res) => {
+  const { domain_id, redtrack_lander_id } = req.body;
+  if (!domain_id) return res.status(400).json({ message: 'domain_id is required.' });
+  try {
+    const funnelId = parseInt(req.params.id);
+    await pool.query(
+      `INSERT INTO domain_funnels (domain_id, funnel_id, status)
+       VALUES ($1, $2, 'standby')
+       ON CONFLICT (domain_id, funnel_id) DO NOTHING`,
+      [domain_id, funnelId]
+    );
+    // Keep domains.rotator_status in sync (standby if not already active/banned)
+    await pool.query(
+      `UPDATE domains SET rotator_status = 'standby', funnel_id = $2
+       WHERE id = $1 AND rotator_status NOT IN ('active', 'banned')`,
+      [domain_id, funnelId]
+    );
+    // If RT lander ID supplied, add to stream at standby weight
+    if (redtrack_lander_id) {
+      const { rows: [funnel] } = await pool.query(`SELECT * FROM funnels WHERE id = $1`, [funnelId]);
+      if (funnel?.redtrack_stream_id) {
+        const { ensureLanderInStream } = require('../lib/rotator');
+        ensureLanderInStream(funnel.redtrack_stream_id, redtrack_lander_id, 1).catch(() => {});
+      }
+    }
+    res.status(201).json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Remove domain from funnel pool (does NOT ban — domain stays in system)
+router.delete('/:id/domains/:domainId', async (req, res) => {
+  try {
+    const funnelId  = parseInt(req.params.id);
+    const domainId  = parseInt(req.params.domainId);
+
+    // Get domain's RT lander ID and funnel's stream ID before deletion
+    const { rows: [info] } = await pool.query(
+      `SELECT d.redtrack_lander_id, f.redtrack_stream_id
+       FROM domains d, funnels f
+       WHERE d.id = $1 AND f.id = $2`,
+      [domainId, funnelId]
+    );
+
+    await pool.query(
+      `DELETE FROM domain_funnels WHERE domain_id = $1 AND funnel_id = $2`,
+      [domainId, funnelId]
+    );
+
+    // If domain is no longer in ANY funnel, set global status to standby
+    const { rows: remaining } = await pool.query(
+      `SELECT 1 FROM domain_funnels WHERE domain_id = $1 LIMIT 1`,
+      [domainId]
+    );
+    if (remaining.length === 0) {
+      await pool.query(
+        `UPDATE domains SET rotator_status = 'standby' WHERE id = $1 AND rotator_status != 'banned'`,
+        [domainId]
+      );
+    }
+
+    // Remove from RT stream
+    if (info?.redtrack_lander_id && info?.redtrack_stream_id) {
+      const { ensureLanderInStream: _, ...rotatorMod } = require('../lib/rotator');
+      const stream = require('../lib/rotator');
+      // Just fire and forget removal from RT stream
+      const axios = require('axios');
+      const apiKey = process.env.REDTRACK_API_KEY;
+      if (apiKey) {
+        axios.get('https://api.redtrack.io/streams', { params: { api_key: apiKey, template: true, per: 500 }, timeout: 10000 })
+          .then(({ data: list }) => {
+            const items = (list.items || list || []).map(s => ({ ...s, id: s.id || s._id }));
+            const st = items.find(s => String(s.id) === String(info.redtrack_stream_id));
+            if (!st) return;
+            const remaining = (st.landings || []).filter(l => String(l.id) !== String(info.redtrack_lander_id));
+            return axios.put(`https://api.redtrack.io/streams/${info.redtrack_stream_id}`, { ...st, landings: remaining }, { params: { api_key: apiKey }, timeout: 10000 });
+          })
+          .catch(err => console.error('[funnels] RT stream cleanup failed:', err.message));
+      }
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 });
 

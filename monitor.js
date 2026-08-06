@@ -11,13 +11,12 @@ require('dotenv').config();
 // (e.g. already scan_suspended so excluded from scanning, or flagged before a deploy)
 async function rotateFlaggedCatchUp(telegram) {
   const [stuck] = await db.execute(
-    `SELECT d.id FROM domains d
-     WHERE d.is_flagged = true
-       AND d.rotator_status IN ('active', 'standby')
-       AND d.is_active = true`
+    `SELECT DISTINCT d.id FROM domains d
+     JOIN domain_funnels df ON df.domain_id = d.id
+     WHERE d.is_flagged = true AND d.is_active = true`
   );
   if (stuck.length) {
-    console.log(`[monitor] catch-up: ${stuck.length} flagged domain(s) still active/standby — rotating`);
+    console.log(`[monitor] catch-up: ${stuck.length} flagged domain(s) still in funnels — rotating`);
     await autoRotateNewlyFlagged(stuck.map(r => r.id), telegram);
   }
 }
@@ -25,53 +24,54 @@ async function rotateFlaggedCatchUp(telegram) {
 async function autoRotateNewlyFlagged(newlyFlaggedIds, telegram) {
   if (!newlyFlaggedIds.length) return;
 
-  // Standby domains that got flagged → ban + remove from RT stream silently
-  const [standbyCandidates] = await db.execute(
-    `SELECT d.domain FROM domains d
-     WHERE d.id = ANY($1) AND d.rotator_status = 'standby'`,
-    [newlyFlaggedIds]
-  );
-  for (const c of standbyCandidates) {
-    try {
-      await rotate(c.domain, 'auto_monitor');
-      console.log(`[monitor] auto-banned flagged standby ${c.domain} and removed from RT stream`);
-    } catch (err) {
-      console.error(`[monitor] auto-ban failed for standby ${c.domain}:`, err.message);
-    }
-  }
-
-  const [candidates] = await db.execute(
-    `SELECT d.domain, f.name AS funnel_name
+  // All flagged domains still in any funnel — rotate() handles active vs standby per funnel
+  const [allInFunnel] = await db.execute(
+    `SELECT DISTINCT d.domain,
+       EXISTS(
+         SELECT 1 FROM domain_funnels df2
+         JOIN funnels f ON f.id = df2.funnel_id
+         WHERE df2.domain_id = d.id AND df2.status = 'active' AND f.auto_rotate = true
+       ) AS should_notify
      FROM domains d
-     JOIN funnels f ON d.funnel_id = f.id
      WHERE d.id = ANY($1)
-       AND d.rotator_status = 'active'
-       AND f.auto_rotate = true`,
+       AND EXISTS (SELECT 1 FROM domain_funnels df WHERE df.domain_id = d.id)`,
     [newlyFlaggedIds]
   );
-  if (!candidates.length) return;
 
-  console.log(`[monitor] auto-rotating ${candidates.length} domain(s) on first flag`);
+  if (!allInFunnel.length) return;
+
+  console.log(`[monitor] auto-rotating ${allInFunnel.length} flagged domain(s)`);
   const rotations = [];
-  for (const c of candidates) {
+  for (const c of allInFunnel) {
     try {
       const result = await rotate(c.domain, 'auto_monitor');
-      // Count remaining standby domains in this funnel after rotation
-      const [standbyRows] = await db.execute(
-        `SELECT COUNT(*) AS cnt FROM domains d
-         JOIN funnels f ON d.funnel_id = f.id
-         WHERE f.name = $1 AND d.rotator_status = 'standby' AND d.is_active = true`,
-        [c.funnel_name]
-      );
-      const standbyLeft = Number(standbyRows[0]?.cnt ?? 0);
-      rotations.push({ from: c.domain, to: result.toDomain, funnel: c.funnel_name, warning: result.rtWarning, directMode: result.directMode, standbyLeft });
-      console.log(`[monitor] auto-rotated ${c.domain} → ${result.toDomain || (result.directMode ? 'direct offers' : 'none')} (${standbyLeft} standby left)`);
+
+      if (c.should_notify) {
+        for (const r of (result.results || [])) {
+          if (r.action !== 'rotated' && r.action !== 'direct_mode') continue;
+          const [standbyRows] = await db.execute(
+            `SELECT COUNT(*) AS cnt FROM domain_funnels df WHERE df.funnel_id = $1 AND df.status = 'standby'`,
+            [r.funnelId]
+          );
+          rotations.push({
+            from: c.domain,
+            to: r.toDomain,
+            funnel: r.funnelName,
+            warning: r.rtWarning,
+            directMode: r.directMode,
+            standbyLeft: Number(standbyRows[0]?.cnt ?? 0),
+          });
+        }
+      }
+      console.log(`[monitor] auto-rotated ${c.domain} (${result.funnelsAffected} funnel(s))`);
     } catch (err) {
-      rotations.push({ from: c.domain, to: null, funnel: c.funnel_name, warning: err.message });
+      rotations.push({ from: c.domain, to: null, funnel: '?', warning: err.message });
       console.error(`[monitor] auto-rotate failed for ${c.domain}:`, err.message);
     }
   }
-  await telegram.notifyAutoRotated(rotations).catch(e => console.error('Telegram error:', e.message));
+  if (rotations.length) {
+    await telegram.notifyAutoRotated(rotations).catch(e => console.error('Telegram error:', e.message));
+  }
 }
 
 class DomainMonitor {
@@ -128,11 +128,13 @@ class DomainMonitor {
     try {
       const [rows] = await db.execute(
         `SELECT d.*, c.name as category_name, c.color as category_color,
-                COALESCE(f.browser_scan, true) AS funnel_browser_scan
+                COALESCE(bool_or(COALESCE(f.browser_scan, true)), true) AS funnel_browser_scan
          FROM domains d
          LEFT JOIN categories c ON d.category_id = c.id
-         LEFT JOIN funnels f ON d.funnel_id = f.id
+         LEFT JOIN domain_funnels df ON df.domain_id = d.id
+         LEFT JOIN funnels f ON f.id = df.funnel_id
          WHERE d.is_active = true
+         GROUP BY d.id, c.name, c.color
          ORDER BY c.name, d.domain`
       );
       return rows;

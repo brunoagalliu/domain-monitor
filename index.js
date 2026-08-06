@@ -105,12 +105,15 @@ app.get('/api/browser-status', async (req, res) => {
         d.is_priority = true
         AND d.scan_suspended = false
         AND d.rotator_status != 'banned'
-        AND COALESCE(f.browser_scan, true) = true
+        AND EXISTS (
+          SELECT 1 FROM domain_funnels df2
+          JOIN funnels f2 ON f2.id = df2.funnel_id
+          WHERE df2.domain_id = d.id AND COALESCE(f2.browser_scan, true) = true
+        )
       )::int AS browser_scan_active,
       COUNT(*) FILTER (WHERE scan_suspended = true)::int              AS suspended,
       MAX(last_browser_check)                                         AS last_check
     FROM domains d
-    LEFT JOIN funnels f ON d.funnel_id = f.id
     WHERE d.is_active = true
   `);
   res.json({
