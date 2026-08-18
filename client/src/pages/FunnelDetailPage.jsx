@@ -160,7 +160,7 @@ function AddLanderPicker({ funnelId, streamId, funnelDomains, onSave, onCancel }
   );
 }
 
-function AddLanderForm({ domainId, currentRtLanderId, onSave, onCancel }) {
+function AddLanderForm({ domainId, funnelId, currentRtLanderId, onSave, onCancel }) {
   const [domLanders, setDomLanders] = useState([]);
   const [selected,   setSelected]   = useState('');
   const [loading,    setLoading]    = useState(true);
@@ -180,7 +180,7 @@ function AddLanderForm({ domainId, currentRtLanderId, onSave, onCancel }) {
     if (!dl) return setError('Select a lander.');
     setSaving(true); setError('');
     try {
-      await api.patch(`/domains/${domainId}`, { redtrack_lander_id: dl.redtrack_lander_id });
+      await api.patch(`/funnels/${funnelId}/domains/${domainId}`, { redtrack_lander_id: dl.redtrack_lander_id });
       onSave();
     } catch (err) { setError(err.message); }
     finally { setSaving(false); }
@@ -219,7 +219,7 @@ function AddLanderForm({ domainId, currentRtLanderId, onSave, onCancel }) {
 
 const STATUS_DOT = { active: 'bg-green-500', standby: 'bg-yellow-400', banned: 'bg-red-400' };
 
-function DomainRow({ domain, onRotate, onDelete, onRefresh }) {
+function DomainRow({ domain, funnelId, onRotate, onDelete, onRefresh }) {
   const [landers,       setLanders]       = useState([]);
   const [expanded,      setExpanded]      = useState(false);
   const [showAddLander, setShowAddLander] = useState(false);
@@ -232,7 +232,15 @@ function DomainRow({ domain, onRotate, onDelete, onRefresh }) {
 
   useEffect(() => { loadLanders(); }, [loadLanders]);
 
-  const primaryLander = landers.find(l => l.redtrack_lander_id) || landers[0];
+  // Show the lander chosen for this funnel specifically, fall back to any RT-linked lander
+  const primaryLander = landers.find(l => domain.funnel_lander_id && String(l.redtrack_lander_id) === String(domain.funnel_lander_id))
+    || landers.find(l => l.redtrack_lander_id)
+    || landers[0];
+
+  // In expanded view, only show the funnel-specific lander (or all if none assigned)
+  const visibleLanders = domain.funnel_lander_id
+    ? landers.filter(l => String(l.redtrack_lander_id) === String(domain.funnel_lander_id))
+    : landers;
 
   async function handleDeploy(dl) {
     setActionState(s => ({ ...s, [dl.id]: 'deploying' }));
@@ -295,7 +303,7 @@ function DomainRow({ domain, onRotate, onDelete, onRefresh }) {
 
       {expanded && (
         <div className="border-t border-gray-100 bg-gray-50 px-4 py-3 space-y-2">
-          {landers.map(dl => (
+          {visibleLanders.map(dl => (
             <div key={dl.id} className="flex items-center gap-2 text-xs">
               <span className="flex-1 text-gray-700 truncate">
                 <span className="font-medium">{dl.redtrack_lander_title || dl.lander_name}</span>
@@ -315,12 +323,15 @@ function DomainRow({ domain, onRotate, onDelete, onRefresh }) {
           {showAddLander ? (
             <AddLanderForm
               domainId={domain.id}
-              currentRtLanderId={domain.redtrack_lander_id}
+              funnelId={funnelId}
+              currentRtLanderId={domain.funnel_lander_id || domain.redtrack_lander_id}
               onSave={() => { setShowAddLander(false); loadLanders(); onRefresh(); }}
               onCancel={() => setShowAddLander(false)}
             />
           ) : (
-            <button onClick={() => setShowAddLander(true)} className="text-xs text-indigo-600 hover:text-indigo-800 transition-colors">+ Add lander</button>
+            <button onClick={() => setShowAddLander(true)} className="text-xs text-indigo-600 hover:text-indigo-800 transition-colors">
+              {domain.funnel_lander_id ? 'Change lander' : '+ Add lander'}
+            </button>
           )}
         </div>
       )}
@@ -354,7 +365,8 @@ function LandingsCard({ funnelId, landings, domains, rotating, onRotate, onRefre
 
   const rtToDomain = {};
   for (const d of domains) {
-    if (d.redtrack_lander_id) rtToDomain[String(d.redtrack_lander_id)] = d;
+    const key = d.funnel_lander_id || d.redtrack_lander_id;
+    if (key) rtToDomain[String(key)] = d;
   }
 
   if (landings.length === 0) {
@@ -497,7 +509,7 @@ function LanderPoolSection({ funnel, id, showAddDomain, setShowAddDomain, onRota
       {active.length > 0 && (
         <div className="space-y-2 mb-3">
           {active.map(d => (
-            <DomainRow key={d.id} domain={d} onRotate={onRotate} onDelete={onDelete} onRefresh={onRefresh} />
+            <DomainRow key={d.id} domain={d} funnelId={Number(id)} onRotate={onRotate} onDelete={onDelete} onRefresh={onRefresh} />
           ))}
         </div>
       )}
@@ -517,7 +529,7 @@ function LanderPoolSection({ funnel, id, showAddDomain, setShowAddDomain, onRota
             <div className="divide-y divide-red-50">
               {banned.map(d => (
                 <div key={d.id} className="px-4 py-1">
-                  <DomainRow domain={d} onRotate={onRotate} onDelete={onDelete} onRefresh={onRefresh} />
+                  <DomainRow domain={d} funnelId={Number(id)} onRotate={onRotate} onDelete={onDelete} onRefresh={onRefresh} />
                 </div>
               ))}
             </div>

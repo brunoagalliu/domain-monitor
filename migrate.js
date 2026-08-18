@@ -232,6 +232,18 @@ const migrations = [
         AND rotator_status IN ('active', 'standby')
         AND is_active = true
       ON CONFLICT (domain_id, funnel_id) DO NOTHING`
+  },
+  {
+    name: 'Add redtrack_lander_id to domain_funnels',
+    sql: `ALTER TABLE domain_funnels ADD COLUMN IF NOT EXISTS redtrack_lander_id TEXT DEFAULT NULL`
+  },
+  {
+    name: 'Seed domain_funnels.redtrack_lander_id from domains',
+    sql: `UPDATE domain_funnels df SET redtrack_lander_id = d.redtrack_lander_id
+      FROM domains d
+      WHERE df.domain_id = d.id
+        AND d.redtrack_lander_id IS NOT NULL
+        AND df.redtrack_lander_id IS NULL`
   }
 ];
 

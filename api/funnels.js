@@ -42,6 +42,7 @@ router.get('/:id', async (req, res) => {
     const { rows: domains } = await pool.query(
       `SELECT d.*,
          df.status,
+         df.redtrack_lander_id AS funnel_lander_id,
          d.rotator_priority AS priority,
          df.created_at AS added_at
        FROM domains d
@@ -198,13 +199,13 @@ router.post('/:id/sync-from-rt', async (req, res) => {
     for (const l of (stream.landings || [])) {
       const newStatus = l.weight >= 1000 ? 'active' : 'standby';
 
-      // Update domain_funnels (source of truth for per-funnel status)
+      // Update domain_funnels — match by per-funnel lander, fallback to domain-level
       const { rowCount: dfRows } = await pool.query(
         `UPDATE domain_funnels df SET status = $1
          FROM domains d
          WHERE df.domain_id = d.id
            AND df.funnel_id = $3
-           AND d.redtrack_lander_id = $2
+           AND COALESCE(df.redtrack_lander_id, d.redtrack_lander_id) = $2
            AND d.rotator_status != 'banned'`,
         [newStatus, String(l.id), req.params.id]
       );
@@ -212,8 +213,13 @@ router.post('/:id/sync-from-rt', async (req, res) => {
       // Keep domains.rotator_status in sync
       await pool.query(
         `UPDATE domains SET rotator_status = $1
-         WHERE redtrack_lander_id = $2 AND rotator_status != 'banned'
-           AND EXISTS (SELECT 1 FROM domain_funnels df WHERE df.domain_id = domains.id AND df.funnel_id = $3)`,
+         WHERE rotator_status != 'banned'
+           AND EXISTS (
+             SELECT 1 FROM domain_funnels df
+             WHERE df.domain_id = domains.id
+               AND df.funnel_id = $3
+               AND COALESCE(df.redtrack_lander_id, domains.redtrack_lander_id) = $2
+           )`,
         [newStatus, String(l.id), req.params.id]
       );
 
@@ -300,10 +306,11 @@ router.post('/:id/domains', async (req, res) => {
   try {
     const funnelId = parseInt(req.params.id);
     await pool.query(
-      `INSERT INTO domain_funnels (domain_id, funnel_id, status)
-       VALUES ($1, $2, 'standby')
-       ON CONFLICT (domain_id, funnel_id) DO NOTHING`,
-      [domain_id, funnelId]
+      `INSERT INTO domain_funnels (domain_id, funnel_id, status, redtrack_lander_id)
+       VALUES ($1, $2, 'standby', $3)
+       ON CONFLICT (domain_id, funnel_id) DO UPDATE
+         SET redtrack_lander_id = COALESCE(EXCLUDED.redtrack_lander_id, domain_funnels.redtrack_lander_id)`,
+      [domain_id, funnelId, redtrack_lander_id || null]
     );
     // Keep domains.rotator_status in sync (standby if not already active/banned)
     await pool.query(
@@ -331,11 +338,13 @@ router.delete('/:id/domains/:domainId', async (req, res) => {
     const funnelId  = parseInt(req.params.id);
     const domainId  = parseInt(req.params.domainId);
 
-    // Get domain's RT lander ID and funnel's stream ID before deletion
+    // Get the per-funnel lander ID and funnel's stream ID before deletion
     const { rows: [info] } = await pool.query(
-      `SELECT d.redtrack_lander_id, f.redtrack_stream_id
-       FROM domains d, funnels f
-       WHERE d.id = $1 AND f.id = $2`,
+      `SELECT COALESCE(df.redtrack_lander_id, d.redtrack_lander_id) AS lander_id, f.redtrack_stream_id
+       FROM domain_funnels df
+       JOIN domains d ON d.id = df.domain_id
+       JOIN funnels f ON f.id = df.funnel_id
+       WHERE df.domain_id = $1 AND df.funnel_id = $2`,
       [domainId, funnelId]
     );
 
@@ -356,11 +365,8 @@ router.delete('/:id/domains/:domainId', async (req, res) => {
       );
     }
 
-    // Remove from RT stream
-    if (info?.redtrack_lander_id && info?.redtrack_stream_id) {
-      const { ensureLanderInStream: _, ...rotatorMod } = require('../lib/rotator');
-      const stream = require('../lib/rotator');
-      // Just fire and forget removal from RT stream
+    // Remove from RT stream using per-funnel lander ID
+    if (info?.lander_id && info?.redtrack_stream_id) {
       const axios = require('axios');
       const apiKey = process.env.REDTRACK_API_KEY;
       if (apiKey) {
@@ -369,13 +375,31 @@ router.delete('/:id/domains/:domainId', async (req, res) => {
             const items = (list.items || list || []).map(s => ({ ...s, id: s.id || s._id }));
             const st = items.find(s => String(s.id) === String(info.redtrack_stream_id));
             if (!st) return;
-            const remaining = (st.landings || []).filter(l => String(l.id) !== String(info.redtrack_lander_id));
+            const remaining = (st.landings || []).filter(l => String(l.id) !== String(info.lander_id));
             return axios.put(`https://api.redtrack.io/streams/${info.redtrack_stream_id}`, { ...st, landings: remaining }, { params: { api_key: apiKey }, timeout: 10000 });
           })
           .catch(err => console.error('[funnels] RT stream cleanup failed:', err.message));
       }
     }
 
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Update per-funnel lander assignment for a domain
+router.patch('/:id/domains/:domainId', async (req, res) => {
+  const { redtrack_lander_id } = req.body;
+  const funnelId = parseInt(req.params.id);
+  const domainId = parseInt(req.params.domainId);
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE domain_funnels SET redtrack_lander_id = $1
+       WHERE funnel_id = $2 AND domain_id = $3`,
+      [redtrack_lander_id || null, funnelId, domainId]
+    );
+    if (rowCount === 0) return res.status(404).json({ message: 'Domain not in this funnel.' });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ message: err.message });
